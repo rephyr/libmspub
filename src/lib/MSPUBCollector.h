@@ -192,7 +192,7 @@ private:
   void setupShapeStructures(ShapeGroupElement &elt);
   void addBlackToPaletteIfNecessary();
   void assignShapesToPages();
-  void writePage(unsigned pageSeqNum) const;
+  void writePage(unsigned pageSeqNum, int pageKind) const;
   void writePageShapes(unsigned pageSeqNum) const;
   void writePageBackground(unsigned pageSeqNum) const;
   void writeImage(double x, double y, double height, double width,

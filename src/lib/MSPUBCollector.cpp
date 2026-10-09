@@ -2080,7 +2080,7 @@ boost::optional<unsigned> MSPUBCollector::getMasterPageSeqNum(unsigned pageSeqNu
   return toReturn;
 }
 
-void MSPUBCollector::writePage(unsigned pageSeqNum) const
+void MSPUBCollector::writePage(unsigned pageSeqNum, int pageKind) const
 {
   const PageInfo &pageInfo = m_pagesBySeqNum.find(pageSeqNum)->second;
   librevenge::RVNGPropertyList pageProps;
@@ -2093,11 +2093,20 @@ void MSPUBCollector::writePage(unsigned pageSeqNum) const
     pageProps.insert("svg:height", m_height);
   }
   const auto &shapeGroupsOrdered = pageInfo.m_shapeGroupsOrdered;
-  if (!shapeGroupsOrdered.empty())
+  // pub-converter: pageKind 0 = as upstream (only pages with shapes of their own),
+  // 1 = a real page from the document page list: always written, even when it only
+  // shows master content or is blank; 2 = one of the special non-printing pages at
+  // the end of the page list: written only if it has shapes, flagged pub:special-page.
+  if (!shapeGroupsOrdered.empty() || pageKind == 1)
   {
-    m_painter->startPage(pageProps);
     boost::optional<unsigned> masterSeqNum = getMasterPageSeqNum(pageSeqNum);
-    auto hasMaster = bool(masterSeqNum);
+    auto hasMaster = bool(masterSeqNum) && pageKind != 2;
+    pageProps.insert("pub:page-id", int(pageSeqNum));
+    if (hasMaster)
+      pageProps.insert("pub:master-page-id", int(masterSeqNum.get()));
+    if (pageKind == 2)
+      pageProps.insert("pub:special-page", true);
+    m_painter->startPage(pageProps);
     if (hasMaster)
     {
       writePageBackground(masterSeqNum.get());
@@ -2105,7 +2114,12 @@ void MSPUBCollector::writePage(unsigned pageSeqNum) const
     writePageBackground(pageSeqNum);
     if (hasMaster)
     {
+      // pub-converter: master content in its own layer so consumers can tell it apart
+      librevenge::RVNGPropertyList masterProps;
+      masterProps.insert("pub:master-page-id", int(masterSeqNum.get()));
+      m_painter->startLayer(masterProps);
       writePageShapes(masterSeqNum.get());
+      m_painter->endLayer();
     }
     writePageShapes(pageSeqNum);
     m_painter->endPage();
@@ -2172,19 +2186,23 @@ bool MSPUBCollector::go()
     {
       if (!pageIsMaster(i->first))
       {
-        writePage(i->first);
+        writePage(i->first, 0);
       }
     }
   }
   else
   {
-    for (unsigned int i : m_pageSeqNumsOrdered)
+    // pub-converter: in every 2002+ file of our corpus the last 4 entries of the
+    // document page list are special pages (scratch area etc.), never printed.
+    const size_t firstSpecial = m_pageSeqNumsOrdered.size() > 4 ? m_pageSeqNumsOrdered.size() - 4 : m_pageSeqNumsOrdered.size();
+    for (size_t k = 0; k < m_pageSeqNumsOrdered.size(); ++k)
     {
+      const unsigned i = m_pageSeqNumsOrdered[k];
       std::map<unsigned, PageInfo>::const_iterator iter =
         m_pagesBySeqNum.find(i);
       if (iter != m_pagesBySeqNum.end() && !pageIsMaster(iter->first))
       {
-        writePage(iter->first);
+        writePage(iter->first, k < firstSpecial ? 1 : 2);
       }
     }
   }
