@@ -948,6 +948,8 @@ bool MSPUBParser::parseShape(librevenge::RVNGInputStream *input,
     bool isText = false;
     bool shouldStretchBorderArt = true;
     unsigned textId = 0;
+    unsigned chainIndex = 0;
+    boost::optional<unsigned> chainPrev, chainNext;
     unsigned width = 0;
     unsigned height = 0;
     while (stillReading(input, pos + length))
@@ -974,6 +976,18 @@ bool MSPUBParser::parseShape(librevenge::RVNGInputStream *input,
         textId = info.data;
         isText = true;
       }
+      else if (info.id == SHAPE_TEXT_CHAIN_INDEX)
+      {
+        chainIndex = info.data;
+      }
+      else if (info.id == SHAPE_TEXT_CHAIN_PREV)
+      {
+        chainPrev = info.data;
+      }
+      else if (info.id == SHAPE_TEXT_CHAIN_NEXT)
+      {
+        chainNext = info.data;
+      }
       else if (info.id == SHAPE_VALIGN)
       {
         m_collector->setShapeVerticalTextAlign(chunk.seqNum,
@@ -996,6 +1010,7 @@ bool MSPUBParser::parseShape(librevenge::RVNGInputStream *input,
         if (isText)
         {
           m_collector->addTextShape(textId, chunk.seqNum);
+          m_collector->setShapeTextChain(chunk.seqNum, chainIndex, chainPrev, chainNext);
         }
       }
     }

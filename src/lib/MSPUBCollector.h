@@ -123,6 +123,8 @@ public:
 
   void setTableCellTextEnds(unsigned textId, const std::vector<unsigned> &ends);
   void setTextStringOffset(unsigned textId, unsigned offset);
+  // pub-converter: linked text boxes
+  void setShapeTextChain(unsigned seqNum, unsigned index, boost::optional<unsigned> prev, boost::optional<unsigned> next);
 
   bool go();
 
@@ -173,6 +175,11 @@ private:
   std::vector<unsigned char> m_allText;
   mutable boost::optional<const char *> m_calculatedEncoding;
   librevenge::RVNGPropertyList m_metaData;
+  // pub-converter: text id -> (chain index, shape seqnum), sorted; filled in go()
+  std::map<unsigned, std::vector<std::pair<unsigned, unsigned> > > m_textChainsByTextId;
+
+  void collectTextChains();
+  void insertTextIdProps(const ShapeInfo &info, librevenge::RVNGPropertyList &props) const;
 
   // helper functions
   std::vector<int> getShapeAdjustValues(const ShapeInfo &info) const;

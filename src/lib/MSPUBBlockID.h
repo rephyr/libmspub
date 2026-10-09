@@ -28,6 +28,10 @@ enum MSPUBBlockID // Don't be alarmed by multiple elements with the same value; 
   SHAPE_HEIGHT = 0xab,
   SHAPE_DONT_STRETCH_BA = 0x07,
   SHAPE_TEXT_ID = 0x27,
+  // pub-converter: linked text boxes (reverse-engineered, see engine/libmspub/OUR-PATCHES.md)
+  SHAPE_TEXT_CHAIN_INDEX = 0x28, // 0-based position of this box in its story's chain; absent = 0
+  SHAPE_TEXT_CHAIN_PREV = 0x36,  // seqnum of the previous box (older files only)
+  SHAPE_TEXT_CHAIN_NEXT = 0x37,  // seqnum of the next box (older files only)
   SHAPE_BORDER_IMAGE_ID = 0x09,
   SUPER_SUB_TYPE_ID = 0x0F,
   BOLD_1_ID = 0x02,

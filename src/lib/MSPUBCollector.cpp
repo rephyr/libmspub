@@ -505,6 +505,57 @@ void MSPUBCollector::setTextStringOffset(
   m_stringOffsetsByTextId[textId] = offset;
 }
 
+void MSPUBCollector::setShapeTextChain(unsigned seqNum, unsigned index, boost::optional<unsigned> prev, boost::optional<unsigned> next)
+{
+  ShapeInfo &info = m_shapeInfosBySeqNum[seqNum];
+  info.m_textChainIndex = index;
+  info.m_textChainPrev = prev;
+  info.m_textChainNext = next;
+}
+
+void MSPUBCollector::collectTextChains()
+{
+  m_textChainsByTextId.clear();
+  for (const auto &it : m_shapeInfosBySeqNum)
+  {
+    const ShapeInfo &info = it.second;
+    if (bool(info.m_textId) && !bool(info.m_tableInfo))
+      m_textChainsByTextId[get(info.m_textId)].push_back(std::make_pair(info.m_textChainIndex, it.first));
+  }
+  for (auto &it : m_textChainsByTextId)
+    std::sort(it.second.begin(), it.second.end());
+}
+
+void MSPUBCollector::insertTextIdProps(const ShapeInfo &info, librevenge::RVNGPropertyList &props) const
+{
+  // Every text box of a story carries the whole story (unchanged libmspub
+  // behaviour); these ids let a consumer lay the story out once and flow it
+  // through the boxes in chain order.
+  if (bool(info.m_seqNum))
+    props.insert("pub:shape-id", int(get(info.m_seqNum)));
+  if (!bool(info.m_textId))
+    return;
+  const unsigned textId = get(info.m_textId);
+  props.insert("pub:story-id", int(textId));
+  if (bool(info.m_tableInfo))
+    return;
+  const auto it = m_textChainsByTextId.find(textId);
+  if (it == m_textChainsByTextId.end() || !bool(info.m_seqNum))
+    return;
+  const auto &chain = it->second;
+  size_t pos = 0;
+  while (pos < chain.size() && chain[pos].second != get(info.m_seqNum))
+    ++pos;
+  if (pos == chain.size())
+    return;
+  props.insert("pub:chain-index", int(pos));
+  props.insert("pub:chain-length", int(chain.size()));
+  if (pos > 0)
+    props.insert("pub:chain-prev", int(chain[pos - 1].second));
+  if (pos + 1 < chain.size())
+    props.insert("pub:chain-next", int(chain[pos + 1].second));
+}
+
 void MSPUBCollector::setTableCellTextEnds(
   const unsigned textId, const std::vector<unsigned> &ends)
 {
@@ -679,6 +730,7 @@ void MSPUBCollector::setupShapeStructures(ShapeGroupElement &elt)
         ptr_info->m_fill = std::shared_ptr<const Fill>(new ImgFill(index, this, false, rot));
       }
     }
+    ptr_info->m_seqNum = elt.getSeqNum();
     elt.setShapeInfo(*ptr_info);
     std::pair<bool, bool> flips = ptr_info->m_flips.get_value_or(std::pair<bool, bool>(false, false));
     VectorTransformation2D flipsTransform = VectorTransformation2D::fromFlips(flips.second, flips.first);
@@ -1118,6 +1170,7 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
         columnWidths.append(columnWidth);
       }
       props.insert("librevenge:table-columns", columnWidths);
+      insertTextIdProps(info, props);
 
       m_painter->startTableObject(props);
 
@@ -1221,6 +1274,7 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
         if (ngap > 0)
           props.insert("fo:column-gap", (double)ngap / EMUS_IN_INCH);
       }
+      insertTextIdProps(info, props);
       m_painter->startTextObject(props);
       for (const auto &line : text)
       {
@@ -1840,6 +1894,7 @@ bool MSPUBCollector::go()
 {
   addBlackToPaletteIfNecessary();
   assignShapesToPages();
+  collectTextChains();
   m_painter->startDocument(librevenge::RVNGPropertyList());
   m_painter->setDocumentMetaData(m_metaData);
 
