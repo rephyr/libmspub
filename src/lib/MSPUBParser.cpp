@@ -980,6 +980,19 @@ bool MSPUBParser::parseShape(librevenge::RVNGInputStream *input,
       {
         chainIndex = info.data;
       }
+      else if (info.id == SHAPE_WRAP_SHAPES && info.dataLength >= 4)
+      {
+        std::vector<unsigned> wrapShapes;
+        input->seek(info.dataOffset + 4, librevenge::RVNG_SEEK_SET);
+        while (stillReading(input, info.dataOffset + info.dataLength))
+        {
+          MSPUBBlockInfo item = parseBlock(input, true);
+          if (item.dataLength == 4)
+            wrapShapes.push_back(item.data);
+        }
+        input->seek(info.dataOffset + info.dataLength, librevenge::RVNG_SEEK_SET);
+        m_collector->setShapeWrapShapes(chunk.seqNum, wrapShapes);
+      }
       else if (info.id == SHAPE_TEXT_CHAIN_PREV)
       {
         chainPrev = info.data;

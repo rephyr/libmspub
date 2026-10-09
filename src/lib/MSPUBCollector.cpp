@@ -386,6 +386,11 @@ void MSPUBCollector::setShapePictureCrop(unsigned seqNum, double top, double bot
   m_shapeInfosBySeqNum[seqNum].m_pictureCrop = crop;
 }
 
+void MSPUBCollector::setShapeWrapShapes(unsigned seqNum, const std::vector<unsigned> &shapes)
+{
+  m_shapeInfosBySeqNum[seqNum].m_wrapShapes = shapes;
+}
+
 void MSPUBCollector::setShapeWordArt(unsigned seqNum, const WordArtInfo &wordArt)
 {
   m_shapeInfosBySeqNum[seqNum].m_wordArt = wordArt;
@@ -685,6 +690,17 @@ void MSPUBCollector::insertTextIdProps(const ShapeInfo &info, librevenge::RVNGPr
     return;
   const unsigned textId = get(info.m_textId);
   props.insert("pub:story-id", int(textId));
+  if (!info.m_wrapShapes.empty())
+  {
+    librevenge::RVNGPropertyListVector wrap;
+    for (unsigned s : info.m_wrapShapes)
+    {
+      librevenge::RVNGPropertyList item;
+      item.insert("pub:shape-id", int(s));
+      wrap.append(item);
+    }
+    props.insert("pub:wrap-shapes", wrap);
+  }
   if (bool(info.m_tableInfo))
     return;
   const auto it = m_textChainsByTextId.find(textId);
@@ -904,6 +920,9 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
   {
     info.m_fill->getProperties(&graphicsProps);
   }
+  // pub-converter: every setStyle of a shape names the shape it belongs to
+  if (bool(info.m_seqNum))
+    graphicsProps.insert("pub:shape-id", int(get(info.m_seqNum)));
   bool hasStroke = false;
   bool hasBorderArt = false;
   boost::optional<unsigned> maybeBorderImg = info.m_borderImgIndex;

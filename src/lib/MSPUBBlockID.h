@@ -32,6 +32,7 @@ enum MSPUBBlockID // Don't be alarmed by multiple elements with the same value; 
   SHAPE_TEXT_CHAIN_INDEX = 0x28, // 0-based position of this box in its story's chain; absent = 0
   SHAPE_TEXT_CHAIN_PREV = 0x36,  // seqnum of the previous box (older files only)
   SHAPE_TEXT_CHAIN_NEXT = 0x37,  // seqnum of the next box (older files only)
+  SHAPE_WRAP_SHAPES = 0x47,      // [guess] list of shape seqnums lying over this text box (text wraps around them)
   SHAPE_BORDER_IMAGE_ID = 0x09,
   SUPER_SUB_TYPE_ID = 0x0F,
   BOLD_1_ID = 0x02,

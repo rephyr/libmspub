@@ -74,6 +74,7 @@ public:
   void setShapePictureContrast(unsigned seqNum, int contrast);
   void setShapePictureCrop(unsigned seqNum, double top, double bottom, double left, double right);
   void setShapeWordArt(unsigned seqNum, const WordArtInfo &wordArt);
+  void setShapeWrapShapes(unsigned seqNum, const std::vector<unsigned> &shapes);
   void setShapeTableInfo(unsigned seqNum, const TableInfo &ti);
   void setShapeBorderImageId(unsigned seqNum, unsigned borderImageId);
   void setShapeCoordinatesInEmu(unsigned seqNum, int xs, int ys, int xe, int ye);
