@@ -76,6 +76,7 @@ const char *mimeByImgType(ImgType type)
   case PNG:
     return "image/png";
   case JPEG:
+  case JPEGCMYK: // pub-converter: was nullptr; consumers must convert CMYK (see pub:image-cmyk)
     return "image/jpeg";
   case DIB:
     return "image/bmp";

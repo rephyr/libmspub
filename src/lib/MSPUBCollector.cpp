@@ -376,6 +376,16 @@ void MSPUBCollector::setShapePictureContrast(unsigned seqNum,
   m_shapeInfosBySeqNum[seqNum].m_pictureContrast = contrast;
 }
 
+void MSPUBCollector::setShapePictureCrop(unsigned seqNum, double top, double bottom, double left, double right)
+{
+  std::vector<double> crop;
+  crop.push_back(top);
+  crop.push_back(bottom);
+  crop.push_back(left);
+  crop.push_back(right);
+  m_shapeInfosBySeqNum[seqNum].m_pictureCrop = crop;
+}
+
 void MSPUBCollector::setShapeBeginArrow(unsigned seqNum,
                                         const Arrow &arrow)
 {
@@ -843,6 +853,18 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
     }
     if (bool(info.m_pictureBrightness))
       graphicsProps.insert("draw:luminance", static_cast<double>(info.m_pictureBrightness.get() + 32768.0) / 65536.0, librevenge::RVNG_PERCENT);
+    // pub-converter: picture crop and contrast (only meaningful for bitmap fills)
+    const bool isBitmapFill = fill == "bitmap";
+    if (isBitmapFill && bool(info.m_pictureCrop))
+    {
+      const std::vector<double> &crop = get(info.m_pictureCrop);
+      graphicsProps.insert("pub:crop-top", crop[0]);
+      graphicsProps.insert("pub:crop-bottom", crop[1]);
+      graphicsProps.insert("pub:crop-left", crop[2]);
+      graphicsProps.insert("pub:crop-right", crop[3]);
+    }
+    if (isBitmapFill && bool(info.m_pictureContrast))
+      graphicsProps.insert("pub:picture-contrast", static_cast<double>(info.m_pictureContrast.get()) / 65536.0);
     bool shadowPropsInserted = false;
     if (bool(info.m_shadow))
     {
@@ -873,6 +895,11 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
     }
     if (bool(info.m_pictureBrightness))
       graphicsProps.remove("draw:luminance");
+    graphicsProps.remove("pub:crop-top");
+    graphicsProps.remove("pub:crop-bottom");
+    graphicsProps.remove("pub:crop-left");
+    graphicsProps.remove("pub:crop-right");
+    graphicsProps.remove("pub:picture-contrast");
     if (shadowPropsInserted)
     {
       graphicsProps.remove("draw:shadow");

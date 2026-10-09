@@ -72,6 +72,7 @@ public:
   void setShapePictureRecolor(unsigned seqNum, const ColorReference &recolor);
   void setShapePictureBrightness(unsigned seqNum, int brightness);
   void setShapePictureContrast(unsigned seqNum, int contrast);
+  void setShapePictureCrop(unsigned seqNum, double top, double bottom, double left, double right);
   void setShapeTableInfo(unsigned seqNum, const TableInfo &ti);
   void setShapeBorderImageId(unsigned seqNum, unsigned borderImageId);
   void setShapeCoordinatesInEmu(unsigned seqNum, int xs, int ys, int xe, int ye);

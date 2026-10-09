@@ -1799,6 +1799,19 @@ void MSPUBParser::parseEscherShape(librevenge::RVNGInputStream *input, const Esc
               m_collector->setShapePictureContrast(*shapeSeqNum, (int)(*ptr_pictureContrast));
             }
           }
+          // pub-converter: picture crop, MS-ODRAW cropFrom* (16.16 fixed-point fractions)
+          {
+            const unsigned *ptr_cropTop = getIfExists_const(foptValues.m_scalarValues, FIELDID_CROP_FROM_TOP);
+            const unsigned *ptr_cropBottom = getIfExists_const(foptValues.m_scalarValues, FIELDID_CROP_FROM_BOTTOM);
+            const unsigned *ptr_cropLeft = getIfExists_const(foptValues.m_scalarValues, FIELDID_CROP_FROM_LEFT);
+            const unsigned *ptr_cropRight = getIfExists_const(foptValues.m_scalarValues, FIELDID_CROP_FROM_RIGHT);
+            if (ptr_cropTop || ptr_cropBottom || ptr_cropLeft || ptr_cropRight)
+              m_collector->setShapePictureCrop(*shapeSeqNum,
+                                               ptr_cropTop ? toFixedPoint(int(*ptr_cropTop)) : 0,
+                                               ptr_cropBottom ? toFixedPoint(int(*ptr_cropBottom)) : 0,
+                                               ptr_cropLeft ? toFixedPoint(int(*ptr_cropLeft)) : 0,
+                                               ptr_cropRight ? toFixedPoint(int(*ptr_cropRight)) : 0);
+          }
           unsigned *ptr_lineBackColor =
             getIfExists(foptValues.m_scalarValues, FIELDID_LINE_BACK_COLOR);
           if (ptr_lineBackColor &&

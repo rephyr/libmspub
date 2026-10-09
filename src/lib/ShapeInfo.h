@@ -72,6 +72,8 @@ struct ShapeInfo
   unsigned m_textChainIndex;
   boost::optional<unsigned> m_textChainPrev;
   boost::optional<unsigned> m_textChainNext;
+  // picture crop, fractions of the image (top, bottom, left, right); negative = padding
+  boost::optional<std::vector<double> > m_pictureCrop;
   ShapeInfo() : m_type(), m_cropType(), m_imgIndex(), m_borderImgIndex(),
     m_coordinates(), m_lines(), m_pageSeqNum(),
     m_textId(), m_adjustValuesByIndex(), m_adjustValues(),
@@ -81,7 +83,7 @@ struct ShapeInfo
     m_numColumns(),
     m_columnSpacing(0), m_beginArrow(), m_endArrow(),
     m_verticalAlign(), m_pictureRecolor(), m_shadow(), m_innerRotation(), m_clipPath(), m_pictureBrightness(), m_pictureContrast(),
-    m_seqNum(), m_textChainIndex(0), m_textChainPrev(), m_textChainNext()
+    m_seqNum(), m_textChainIndex(0), m_textChainPrev(), m_textChainNext(), m_pictureCrop()
   {
   }
   std::shared_ptr<const CustomShape> getCustomShape() const

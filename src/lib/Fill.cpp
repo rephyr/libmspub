@@ -35,6 +35,8 @@ void ImgFill::getProperties(librevenge::RVNGPropertyList *out) const
     out->insert("librevenge:mime-type", mimeByImgType(img.first));
     out->insert("draw:fill-image", img.second.getBase64Data());
     out->insert("draw:fill-image-ref-point", "top-left");
+    if (img.first == JPEGCMYK)
+      out->insert("pub:image-cmyk", true);
     if (! m_isTexture)
     {
       out->insert("style:repeat", "stretch");
