@@ -1371,6 +1371,9 @@ ParagraphStyle MSPUBParser::getParagraphStyle(librevenge::RVNGInputStream *input
   NumberingType numberingType = STANDARD_WESTERN;
   NumberingDelimiter numberingDelimiter = NO_DELIMITER;
   boost::optional<unsigned> numberIfRestarted;
+  unsigned formatCode = 0;
+  boost::optional<unsigned> listRaw2;
+  boost::optional<unsigned> delimiterRaw;
 
   unsigned offset = input->tell();
   unsigned len = readU32(input);
@@ -1451,11 +1454,16 @@ ParagraphStyle MSPUBParser::getParagraphStyle(librevenge::RVNGInputStream *input
         MSPUBBlockInfo listSubInfo = parseBlock(input, true);
         switch (listSubInfo.id)
         {
+        // pub-converter: these read the container's info.data (always 0) before
         case PARAGRAPH_LIST_NUMBERING_TYPE:
-          numberingType = readNumberingType(info.data);
+          formatCode = listSubInfo.data;
+          numberingType = readNumberingType(listSubInfo.data);
           break;
         case PARAGRAPH_LIST_BULLET_CHAR:
-          bulletChar = info.data;
+          bulletChar = listSubInfo.data;
+          break;
+        case 0x02:
+          listRaw2 = listSubInfo.data;
           break;
         default:
           break;
@@ -1465,6 +1473,9 @@ ParagraphStyle MSPUBParser::getParagraphStyle(librevenge::RVNGInputStream *input
     }
     case PARAGRAPH_LIST_NUMBER_RESTART:
       numberIfRestarted = info.data;
+      break;
+    case PARAGRAPH_LIST_NUMBERING_DELIMITER:
+      delimiterRaw = info.data;
       break;
     case PARAGRAPH_DROP_CAP_LINES:
       ret.m_dropCapLines = info.data;
@@ -1487,6 +1498,11 @@ ParagraphStyle MSPUBParser::getParagraphStyle(librevenge::RVNGInputStream *input
       ret.m_listInfo = ListInfo(numberIfRestarted, numberingType,
                                 numberingDelimiter);
     }
+    ret.m_listInfo->m_formatCode = formatCode;
+    ret.m_listInfo->m_bulletCode = bulletChar;
+    ret.m_listInfo->m_raw2 = listRaw2;
+    ret.m_listInfo->m_delimiterRaw = delimiterRaw;
+    ret.m_listInfo->m_numberIfRestarted = numberIfRestarted;
   }
 
   return ret;

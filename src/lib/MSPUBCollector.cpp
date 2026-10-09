@@ -1845,6 +1845,61 @@ librevenge::RVNGPropertyList MSPUBCollector::getParaStyleProps(const ParagraphSt
   {
     ret.insert("style:length", (int)dropCapLetters);
   }
+  // pub-converter: list info (bullets / numbering), see OUR-PATCHES.md
+  const boost::optional<ListInfo> &list = bool(style.m_listInfo) ? style.m_listInfo : defaultStyle.m_listInfo;
+  if (bool(list))
+  {
+    const ListInfo &li = get(list);
+    const unsigned fmt = li.m_formatCode;
+    ret.insert("pub:list-format", int(fmt));
+    if (fmt == 255)
+    {
+      ret.insert("pub:list-type", "none");
+    }
+    else if (fmt == 23)
+    {
+      ret.insert("pub:list-type", "bullet");
+      if (li.m_bulletCode && li.m_bulletCode < 0x110000 && !(li.m_bulletCode >= 0xD800 && li.m_bulletCode < 0xE000))
+      {
+        ret.insert("pub:list-bullet-code", int(li.m_bulletCode));
+        librevenge::RVNGString ch;
+        const unsigned cp = li.m_bulletCode;
+        char buf[5] = {0, 0, 0, 0, 0};
+        if (cp < 0x80)
+          buf[0] = char(cp);
+        else if (cp < 0x800)
+        {
+          buf[0] = char(0xC0 | (cp >> 6));
+          buf[1] = char(0x80 | (cp & 0x3F));
+        }
+        else if (cp < 0x10000)
+        {
+          buf[0] = char(0xE0 | (cp >> 12));
+          buf[1] = char(0x80 | ((cp >> 6) & 0x3F));
+          buf[2] = char(0x80 | (cp & 0x3F));
+        }
+        else
+        {
+          buf[0] = char(0xF0 | (cp >> 18));
+          buf[1] = char(0x80 | ((cp >> 12) & 0x3F));
+          buf[2] = char(0x80 | ((cp >> 6) & 0x3F));
+          buf[3] = char(0x80 | (cp & 0x3F));
+        }
+        ch.append(buf);
+        ret.insert("pub:list-bullet-char", ch);
+      }
+    }
+    else
+    {
+      ret.insert("pub:list-type", "number");
+      if (bool(li.m_numberIfRestarted))
+        ret.insert("pub:list-start", int(get(li.m_numberIfRestarted)));
+    }
+    if (bool(li.m_delimiterRaw))
+      ret.insert("pub:list-delimiter-raw", int(get(li.m_delimiterRaw)));
+    if (bool(li.m_raw2))
+      ret.insert("pub:list-raw2", int(get(li.m_raw2)));
+  }
   return ret;
 }
 
