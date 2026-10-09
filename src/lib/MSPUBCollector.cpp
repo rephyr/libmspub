@@ -1787,7 +1787,12 @@ void MSPUBCollector::addFont(std::vector<unsigned char> name)
 librevenge::RVNGPropertyList MSPUBCollector::getParaStyleProps(const ParagraphStyle &style, boost::optional<unsigned> defaultParaStyleIndex) const
 {
   ParagraphStyle _nothing;
-  const ParagraphStyle &defaultStyle = bool(defaultParaStyleIndex) && defaultParaStyleIndex.get() < m_defaultParaStyles.size() ? m_defaultParaStyles[defaultParaStyleIndex.get()] : _nothing;
+  // pub-converter: like getCharStyleProps, a paragraph without a style index uses style 0 ("Normal").
+  // Upstream used no default at all, so Normal's line spacing (1.19 sp in Publisher 2010+ templates) and
+  // space after were lost for every paragraph that only inherits them.
+  if (!defaultParaStyleIndex)
+    defaultParaStyleIndex = 0;
+  const ParagraphStyle &defaultStyle = defaultParaStyleIndex.get() < m_defaultParaStyles.size() ? m_defaultParaStyles[defaultParaStyleIndex.get()] : _nothing;
   librevenge::RVNGPropertyList ret;
   Alignment align = style.m_align.get_value_or(
                       defaultStyle.m_align.get_value_or(LEFT));
