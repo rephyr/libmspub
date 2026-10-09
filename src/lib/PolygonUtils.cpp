@@ -1716,6 +1716,53 @@ const CustomShape CS_CALLOUT_1(
   21600, 21600,
   nullptr, 0);
 
+// pub-converter: border callouts (MS-ODRAW msosptBorderCallout1-3, types 47-49): the same geometry as the
+// plain callouts above, but the rectangle is stroked too. Seen as the red time boxes with lines in tdf150838.
+const unsigned short BORDER_CALLOUT_1_SEGMENTS[] =
+{
+  0x4000, 0x0003, 0x6000, 0x8000,
+  0x4000, 0x0001, 0x8000
+};
+
+const CustomShape CS_BORDER_CALLOUT_1(
+  CALLOUT_1_VERTICES, sizeof(CALLOUT_1_VERTICES) / sizeof(Vertex),
+  BORDER_CALLOUT_1_SEGMENTS, sizeof(BORDER_CALLOUT_1_SEGMENTS) / sizeof(unsigned short),
+  CALLOUT_1_CALC, sizeof(CALLOUT_1_CALC) / sizeof(Calculation),
+  CALLOUT_1_DEFAULT_ADJUST, sizeof(CALLOUT_1_DEFAULT_ADJUST) / sizeof(int),
+  nullptr, 0,
+  21600, 21600,
+  nullptr, 0);
+
+const unsigned short BORDER_CALLOUT_2_SEGMENTS[] =
+{
+  0x4000, 0x0003, 0x6000, 0x8000,
+  0x4000, 0x0001, 0x8000, 0x4000, 0x0001, 0x8000, 0x4000, 0x0001, 0x8000
+};
+
+const CustomShape CS_BORDER_CALLOUT_2(
+  CALLOUT_2_VERTICES, sizeof(CALLOUT_2_VERTICES) / sizeof(Vertex),
+  BORDER_CALLOUT_2_SEGMENTS, sizeof(BORDER_CALLOUT_2_SEGMENTS) / sizeof(unsigned short),
+  CALLOUT_2_CALC, sizeof(CALLOUT_2_CALC) / sizeof(Calculation),
+  CALLOUT_2_DEFAULT_ADJUST, sizeof(CALLOUT_2_DEFAULT_ADJUST) / sizeof(int),
+  nullptr, 0,
+  21600, 21600,
+  nullptr, 0);
+
+const unsigned short BORDER_CALLOUT_3_SEGMENTS[] =
+{
+  0x4000, 0x0003, 0x6000, 0x8000,
+  0x4000, 0xaa00, 0x0003, 0x8000
+};
+
+const CustomShape CS_BORDER_CALLOUT_3(
+  CALLOUT_3_VERTICES, sizeof(CALLOUT_3_VERTICES) / sizeof(Vertex),
+  BORDER_CALLOUT_3_SEGMENTS, sizeof(BORDER_CALLOUT_3_SEGMENTS) / sizeof(unsigned short),
+  CALLOUT_3_CALC, sizeof(CALLOUT_3_CALC) / sizeof(Calculation),
+  CALLOUT_3_DEFAULT_ADJUST, sizeof(CALLOUT_3_DEFAULT_ADJUST) / sizeof(int),
+  nullptr, 0,
+  21600, 21600,
+  nullptr, 0);
+
 const Vertex CURVED_CONNECTOR_5_VERTICES[] =
 {
   {0, 0}, {CALCULATED_VALUE(21), 0}, {CALCULATED_VALUE(0), CALCULATED_VALUE(12)}, {CALCULATED_VALUE(0), CALCULATED_VALUE(11)}, {CALCULATED_VALUE(0), CALCULATED_VALUE(14)}, {CALCULATED_VALUE(6), CALCULATED_VALUE(4)}, {CALCULATED_VALUE(3), CALCULATED_VALUE(4)}, {CALCULATED_VALUE(8), CALCULATED_VALUE(4)}, {CALCULATED_VALUE(1), CALCULATED_VALUE(18)}, {CALCULATED_VALUE(1), CALCULATED_VALUE(16)}, {CALCULATED_VALUE(1), CALCULATED_VALUE(20)}, {CALCULATED_VALUE(10), 21600}, {21600, 21600}
@@ -5315,6 +5362,12 @@ const CustomShape *getCustomShape(unsigned type)
     return &CS_CALLOUT_2;
   case CALLOUT_3:
     return &CS_CALLOUT_3;
+  case BORDER_CALLOUT_1: // pub-converter
+    return &CS_BORDER_CALLOUT_1;
+  case BORDER_CALLOUT_2: // pub-converter
+    return &CS_BORDER_CALLOUT_2;
+  case BORDER_CALLOUT_3: // pub-converter
+    return &CS_BORDER_CALLOUT_3;
   case RIBBON:
     return &CS_RIBBON;
   case RIBBON_2:

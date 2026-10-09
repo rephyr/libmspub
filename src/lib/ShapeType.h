@@ -50,6 +50,10 @@ enum ShapeType
   CALLOUT_1            = 41,
   CALLOUT_2            = 42,
   CALLOUT_3            = 43,
+  // pub-converter: border callouts (rectangle with its line + the callout line)
+  BORDER_CALLOUT_1     = 47,
+  BORDER_CALLOUT_2     = 48,
+  BORDER_CALLOUT_3     = 49,
   RIBBON               = 53,
   RIBBON_2             = 54,
   CHEVRON              = 55,

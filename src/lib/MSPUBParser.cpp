@@ -1060,6 +1060,47 @@ QuillChunkReference MSPUBParser::parseQuillChunkReference(librevenge::RVNGInputS
   return ret;
 }
 
+void MSPUBParser::parsePageNumberTokens(librevenge::RVNGInputStream *input, const QuillChunkReference &chunk, std::set<unsigned> &out)
+{
+  // pub-converter, see parseQuill
+  const unsigned long end = chunk.offset + chunk.length;
+  if (chunk.length < 16)
+    return;
+  const unsigned count = readU32(input);
+  readU32(input); // 0x0c
+  readU32(input); // 0x0001ffff
+  if (count == 0 || count > 100000 || 12 + 4ul * (count + 1) > chunk.length)
+    return;
+  std::vector<unsigned> cps;
+  for (unsigned k = 0; k <= count; ++k)
+    cps.push_back(readU32(input));
+  for (unsigned k = 0; k < count; ++k)
+  {
+    const unsigned long start = input->tell();
+    if (start + 4 > end)
+      return;
+    const unsigned length = readU32(input);
+    if (length < 4 || start + length > end)
+      return;
+    bool isField = false;
+    int fieldType = 1, tokenLength = 0;
+    while ((unsigned long)input->tell() + 6 <= start + length)
+    {
+      const unsigned short key = readU16(input);
+      const int value = int(readU32(input));
+      if (key == 0x2200)
+        isField = value == 0;
+      else if (key == 0x2201)
+        tokenLength = value;
+      else if (key == 0x2202)
+        fieldType = value;
+    }
+    if (isField && fieldType == -5 && tokenLength == 1)
+      out.insert(cps[k]);
+    input->seek(start + length, librevenge::RVNG_SEEK_SET);
+  }
+}
+
 std::vector<unsigned> MSPUBParser::parseTableCellDefinitions(
   librevenge::RVNGInputStream *input, const QuillChunkReference &chunk)
 {
@@ -1114,6 +1155,7 @@ bool MSPUBParser::parseQuill(librevenge::RVNGInputStream *input)
   std::vector<unsigned> textIDs;
   std::vector<unsigned> textOffsets;
   std::map<unsigned, std::vector<unsigned> > tableCellTextEnds;
+  std::map<unsigned, std::set<unsigned> > pageNumberFields; // pub-converter: text block -> char offsets
   unsigned textOffsetAccum = 0;
   std::vector<TextSpanReference> spans;
   std::vector<TextParagraphReference> paras;
@@ -1188,6 +1230,15 @@ bool MSPUBParser::parseQuill(librevenge::RVNGInputStream *input)
       input->seek(i->offset, librevenge::RVNG_SEEK_SET);
       tableCellTextEnds[i->id] = parseTableCellDefinitions(input, *i);
     }
+    else if (i->name == "TOKN")
+    {
+      // pub-converter: text tokens (fields). Reverse-engineered: a PLC of character ranges per text block
+      // (chunk id = block index); each entry is [u32 length incl. itself] then (u16 key, i32 value) pairs.
+      // 0x2200 = 0 and 0x2202 = -5 on a one-character token = the page-number field (its text is "#").
+      // Seen in 11 corpus files (parish-weekly, missal, ccuk, ...); 0x2202 = 0 is a mail-merge field, 6 a date.
+      input->seek(i->offset, librevenge::RVNG_SEEK_SET);
+      parsePageNumberTokens(input, *i, pageNumberFields[i->id]);
+    }
   }
   if (parsedStrs && parsedSyid && parsedFdpc && parsedFdpp && parsedStsh && parsedFont && textChunkReference != chunkReferences.end())
   {
@@ -1201,10 +1252,20 @@ bool MSPUBParser::parseQuill(librevenge::RVNGInputStream *input)
       std::vector<TextParagraph> readParas;
       std::vector<TextSpan> readSpans;
       std::vector<unsigned char> text;
+      const auto fieldsIt = pageNumberFields.find(j);
       for (unsigned k = 0; k < textLengths[j] && currentTextPara != paras.end() && currentTextSpan != spans.end(); ++k)
       {
-        text.push_back(readU8(input));
-        text.push_back(readU8(input));
+        unsigned char lo = readU8(input);
+        unsigned char hi = readU8(input);
+        // pub-converter: a page-number field's "#" becomes U+FDD0 (a noncharacter that never occurs in real
+        // text); the collector writes it as insertField(text:page-number)
+        if (fieldsIt != pageNumberFields.end() && lo == '#' && hi == 0 && fieldsIt->second.count(k))
+        {
+          lo = 0xd0;
+          hi = 0xfd;
+        }
+        text.push_back(lo);
+        text.push_back(hi);
         bytesRead += 2;
         if (bytesRead >= currentTextSpan->last - textChunkReference->offset)
         {

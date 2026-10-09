@@ -132,6 +132,7 @@ protected:
                                        &guideData);
   std::vector<Vertex> parseVertices(const std::vector<unsigned char>
                                     &vertexData);
+  void parsePageNumberTokens(librevenge::RVNGInputStream *input, const QuillChunkReference &chunk, std::set<unsigned> &out); // pub-converter
   std::vector<unsigned> parseTableCellDefinitions(librevenge::RVNGInputStream *input,
                                                   const QuillChunkReference &chunk);
   std::vector<unsigned short> parseSegments(

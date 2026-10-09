@@ -121,6 +121,33 @@ static void separateSpacesAndInsertText(librevenge::RVNGDrawingInterface *iface,
   separateTabsAndInsertText(iface, tmpText);
 }
 
+// pub-converter: U+FDD0 (UTF-8 EF B7 90) marks a page-number field (see MSPUBParser::parseQuill)
+static void insertTextWithFields(librevenge::RVNGDrawingInterface *iface, const librevenge::RVNGString &text)
+{
+  static const char marker[] = "\xef\xb7\x90";
+  const std::string all(text.cstr());
+  if (!iface || all.find(marker) == std::string::npos)
+  {
+    separateSpacesAndInsertText(iface, text);
+    return;
+  }
+  size_t from = 0;
+  for (;;)
+  {
+    const size_t at = all.find(marker, from);
+    const std::string part = all.substr(from, at == std::string::npos ? std::string::npos : at - from);
+    if (!part.empty())
+      separateSpacesAndInsertText(iface, librevenge::RVNGString(part.c_str()));
+    if (at == std::string::npos)
+      break;
+    librevenge::RVNGPropertyList field;
+    field.insert("librevenge:field-type", "text:page-number");
+    field.insert("style:num-format", "1");
+    iface->insertField(field);
+    from = at + 3;
+  }
+}
+
 struct TableLayoutCell
 {
   TableLayoutCell()
@@ -923,6 +950,14 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
   // pub-converter: every setStyle of a shape names the shape it belongs to
   if (bool(info.m_seqNum))
     graphicsProps.insert("pub:shape-id", int(get(info.m_seqNum)));
+  // pub-converter: the shape type, and a flag when libmspub has no geometry for it
+  // (writeCustomShape then draws nothing, so its fill and line are lost silently)
+  {
+    const unsigned shapeType = bool(info.m_cropType) ? info.m_cropType.get() : info.m_type.get_value_or(RECTANGLE);
+    graphicsProps.insert("pub:shape-type", int(shapeType));
+    if (!info.getCustomShape())
+      graphicsProps.insert("pub:shape-undrawn", true);
+  }
   bool hasStroke = false;
   bool hasBorderArt = false;
   boost::optional<unsigned> maybeBorderImg = info.m_borderImgIndex;
@@ -1411,7 +1446,7 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
                 {
                   librevenge::RVNGPropertyList charProps = getCharStyleProps(text[para].spans[i_spans].style, text[para].style.m_defaultCharStyleIndex);
                   m_painter->openSpan(charProps);
-                  separateSpacesAndInsertText(m_painter, paraTexts[para][i_spans]);
+                  insertTextWithFields(m_painter, paraTexts[para][i_spans]);
                   m_painter->closeSpan();
                 }
 
@@ -1476,7 +1511,7 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
                            getCalculatedEncoding());
           librevenge::RVNGPropertyList charProps = getCharStyleProps(line.spans[i_spans].style, line.style.m_defaultCharStyleIndex);
           m_painter->openSpan(charProps);
-          separateSpacesAndInsertText(m_painter, textString);
+          insertTextWithFields(m_painter, textString);
           m_painter->closeSpan();
         }
         m_painter->closeParagraph();
@@ -2123,6 +2158,27 @@ void MSPUBCollector::writePage(unsigned pageSeqNum, int pageKind) const
   // the end of the page list (scratch area etc.): never written.
   if (pageKind == 2)
     return;
+  // pub-converter: old files (Publisher 97/98/2000, upstream page path) carry extra pages whose shapes all have
+  // zero size (template stubs; checked in 7 corpus files: always rectangle/ellipse/line stubs of 0 x 0 in). They
+  // came out as a blank first page with the real page 1 second. Such pages are not written.
+  if (pageKind == 0)
+  {
+    bool anyVisible = false, anyShape = false;
+    for (const auto &kv : m_shapeInfosBySeqNum)
+    {
+      if (!kv.second.m_pageSeqNum || kv.second.m_pageSeqNum.get() != pageSeqNum)
+        continue;
+      anyShape = true;
+      const auto &c = kv.second.m_coordinates;
+      if (c && (c->getWidthIn() > 0 || c->getHeightIn() > 0))
+      {
+        anyVisible = true;
+        break;
+      }
+    }
+    if (anyShape && !anyVisible)
+      return;
+  }
   if (!shapeGroupsOrdered.empty() || pageKind == 1)
   {
     boost::optional<unsigned> masterSeqNum = getMasterPageSeqNum(pageSeqNum);
