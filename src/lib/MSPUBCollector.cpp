@@ -2115,16 +2115,16 @@ void MSPUBCollector::writePage(unsigned pageSeqNum, int pageKind) const
   // pub-converter: pageKind 0 = as upstream (only pages with shapes of their own),
   // 1 = a real page from the document page list: always written, even when it only
   // shows master content or is blank; 2 = one of the special non-printing pages at
-  // the end of the page list: written only if it has shapes, flagged pub:special-page.
+  // the end of the page list (scratch area etc.): never written.
+  if (pageKind == 2)
+    return;
   if (!shapeGroupsOrdered.empty() || pageKind == 1)
   {
     boost::optional<unsigned> masterSeqNum = getMasterPageSeqNum(pageSeqNum);
-    auto hasMaster = bool(masterSeqNum) && pageKind != 2;
+    auto hasMaster = bool(masterSeqNum);
     pageProps.insert("pub:page-id", int(pageSeqNum));
     if (hasMaster)
       pageProps.insert("pub:master-page-id", int(masterSeqNum.get()));
-    if (pageKind == 2)
-      pageProps.insert("pub:special-page", true);
     m_painter->startPage(pageProps);
     if (hasMaster)
     {
