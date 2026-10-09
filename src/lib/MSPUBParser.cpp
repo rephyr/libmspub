@@ -48,6 +48,10 @@
 namespace libmspub
 {
 
+// Largest stream position we let length fields point at; leaves headroom so
+// "offset + length + small tail" still fits in a signed 32-bit long.
+static const unsigned long MSPUB_MAX_STREAM_POS = 0x7fff0000UL;
+
 namespace
 {
 
@@ -2574,6 +2578,10 @@ EscherContainerInfo MSPUBParser::parseEscherContainer(librevenge::RVNGInputStrea
   info.type = readU16(input);
   info.contentsLength = readU32(input);
   info.contentsOffset = input->tell();
+  // unsigned long is 32 bits on wasm32/i686: keep offset + length (+ tail)
+  // from wrapping around, which made callers seek backwards forever.
+  if (info.contentsLength > MSPUB_MAX_STREAM_POS - info.contentsOffset)
+    info.contentsLength = MSPUB_MAX_STREAM_POS - info.contentsOffset;
   MSPUB_DEBUG_MSG(("Parsed escher container: type 0x%x, contentsOffset 0x%lx, contentsLength 0x%lx\n", info.type, info.contentsOffset, info.contentsLength));
   return info;
 }
@@ -2590,6 +2598,9 @@ MSPUBBlockInfo MSPUBParser::parseBlock(librevenge::RVNGInputStream *input, bool 
   if (varLen)
   {
     info.dataLength = readU32(input);
+    // see parseEscherContainer: avoid 32-bit wrap-around of offset + length
+    if (info.dataLength > MSPUB_MAX_STREAM_POS - info.dataOffset)
+      info.dataLength = MSPUB_MAX_STREAM_POS - info.dataOffset;
     if (isBlockDataString(info.type))
     {
       info.stringData = std::vector<unsigned char>();
