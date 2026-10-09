@@ -2831,20 +2831,40 @@ bool MSPUBParser::parseMetaData()
   m_input->seek(0, librevenge::RVNG_SEEK_SET);
   MSPUBMetaData metaData;
 
+  // pub-converter: metadata is optional; a truncated property stream used to throw
+  // EndOfStreamException out of parse() and lose the whole document (tdf121800).
   std::unique_ptr<librevenge::RVNGInputStream> sumaryInfo(m_input->getSubStreamByName("\x05SummaryInformation"));
   if (sumaryInfo)
   {
-    metaData.parse(sumaryInfo.get());
+    try
+    {
+      metaData.parse(sumaryInfo.get());
+    }
+    catch (...)
+    {
+    }
   }
 
   std::unique_ptr<librevenge::RVNGInputStream> docSumaryInfo(m_input->getSubStreamByName("\005DocumentSummaryInformation"));
   if (docSumaryInfo)
   {
-    metaData.parse(docSumaryInfo.get());
+    try
+    {
+      metaData.parse(docSumaryInfo.get());
+    }
+    catch (...)
+    {
+    }
   }
 
   m_input->seek(0, librevenge::RVNG_SEEK_SET);
-  metaData.parseTimes(m_input);
+  try
+  {
+    metaData.parseTimes(m_input);
+  }
+  catch (...)
+  {
+  }
   m_collector->collectMetaData(metaData.getMetaData());
 
   return true;
