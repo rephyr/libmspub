@@ -1845,6 +1845,39 @@ librevenge::RVNGPropertyList MSPUBCollector::getParaStyleProps(const ParagraphSt
   {
     ret.insert("style:length", (int)dropCapLetters);
   }
+  // pub-converter: tab stops (positions were parsed but dropped before)
+  const ParagraphStyle &tabSource = !style.m_tabStopsInEmu.empty() ? style : defaultStyle;
+  if (!tabSource.m_tabStopsInEmu.empty())
+  {
+    librevenge::RVNGPropertyListVector tabs;
+    for (size_t i = 0; i < tabSource.m_tabStopsInEmu.size(); ++i)
+    {
+      librevenge::RVNGPropertyList tab;
+      tab.insert("style:position", double(tabSource.m_tabStopsInEmu[i]) / EMUS_IN_INCH);
+      const unsigned flags = i < tabSource.m_tabStopFlags.size() ? tabSource.m_tabStopFlags[i] : 0;
+      // [guess] same codes as Publisher paragraph alignment (0 left, 1 right, 2 center);
+      // 3 = decimal is a further guess. Seen in tdf89393: 2 at the box middle, 1 at its right edge.
+      switch (flags & 0xff)
+      {
+      case 1:
+        tab.insert("style:type", "right");
+        break;
+      case 2:
+        tab.insert("style:type", "center");
+        break;
+      case 3:
+        tab.insert("style:type", "char");
+        tab.insert("style:char", ".");
+        break;
+      default:
+        tab.insert("style:type", "left");
+        break;
+      }
+      tab.insert("pub:tab-flags", int(flags));
+      tabs.append(tab);
+    }
+    ret.insert("style:tab-stops", tabs);
+  }
   // pub-converter: list info (bullets / numbering), see OUR-PATCHES.md
   const boost::optional<ListInfo> &list = bool(style.m_listInfo) ? style.m_listInfo : defaultStyle.m_listInfo;
   if (bool(list))

@@ -1435,10 +1435,21 @@ ParagraphStyle MSPUBParser::getParagraphStyle(librevenge::RVNGInputStream *input
             if (tabEntryInfo.type == GENERAL_CONTAINER)
             {
               input->seek(tabEntryInfo.dataOffset + 4, librevenge::RVNG_SEEK_SET);
-              MSPUBBlockInfo tabInfo = parseBlock(input, true);
-              if (tabInfo.id == TAB_AMOUNT)
+              // pub-converter: read every sub-block of the entry, not only the first
+              boost::optional<unsigned> tabPos;
+              unsigned tabFlags = 0;
+              while (stillReading(input, tabEntryInfo.dataOffset + tabEntryInfo.dataLength))
               {
-                ret.m_tabStopsInEmu.push_back(tabInfo.data);
+                MSPUBBlockInfo tabInfo = parseBlock(input, true);
+                if (tabInfo.id == TAB_AMOUNT && !bool(tabPos))
+                  tabPos = tabInfo.data;
+                else if (tabInfo.id == 0x01)
+                  tabFlags = tabInfo.data;
+              }
+              if (bool(tabPos))
+              {
+                ret.m_tabStopsInEmu.push_back(get(tabPos));
+                ret.m_tabStopFlags.push_back(tabFlags);
               }
             }
           }
