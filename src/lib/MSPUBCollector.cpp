@@ -386,6 +386,144 @@ void MSPUBCollector::setShapePictureCrop(unsigned seqNum, double top, double bot
   m_shapeInfosBySeqNum[seqNum].m_pictureCrop = crop;
 }
 
+void MSPUBCollector::setShapeWordArt(unsigned seqNum, const WordArtInfo &wordArt)
+{
+  m_shapeInfosBySeqNum[seqNum].m_wordArt = wordArt;
+}
+
+namespace
+{
+// GeometryTextBooleanProperties: a value bit counts only if its "use" bit (value bit + 16) is set
+bool gtextFlag(unsigned props, unsigned bit)
+{
+  return (props & (1u << bit)) && (props & (1u << (bit + 16)));
+}
+}
+
+// pub-converter: draw WordArt as a text object (the text, font, size, bold/italic,
+// fill colour) instead of filling the warp outline, which came out as a black blob.
+// The warp itself (pub:wordart-shape = Escher shape type) is left to the consumer.
+void MSPUBCollector::paintWordArt(const ShapeInfo &info, const librevenge::RVNGPropertyList &fillProps, const VectorTransformation2D &thisTransform) const
+{
+  const WordArtInfo &wa = get(info.m_wordArt);
+  librevenge::RVNGPropertyList style(fillProps);
+  bool hasLine = false;
+  for (const auto &line : info.m_lines)
+  {
+    if (line.m_lineExists)
+    {
+      style.insert("draw:stroke", "solid");
+      style.insert("svg:stroke-color", getColorString(line.m_color.getFinalColor(m_paletteColors)));
+      style.insert("svg:stroke-width", double(line.m_widthInEmu) / EMUS_IN_INCH);
+      hasLine = true;
+      break;
+    }
+  }
+  if (!hasLine)
+    style.insert("draw:stroke", "none");
+  m_painter->setStyle(style);
+
+  librevenge::RVNGPropertyList props;
+  setRectCoordProps(info.m_coordinates.get_value_or(Coordinate()), &props);
+  const double rotation = thisTransform.getRotation();
+  if (rotation != 0)
+    props.insert("librevenge:rotate", rotation * 180 / M_PI);
+  props.insert("fo:padding-left", 0.);
+  props.insert("fo:padding-top", 0.);
+  props.insert("fo:padding-right", 0.);
+  props.insert("fo:padding-bottom", 0.);
+  props.insert("draw:textarea-vertical-align", "middle");
+  props.insert("pub:wordart", true);
+  props.insert("pub:wordart-shape", int(info.m_type.get_value_or(0)));
+  const unsigned bp = wa.m_boolProps;
+  const char *fit = gtextFlag(bp, 10) ? "stretch" : gtextFlag(bp, 8) ? "best-fit" : gtextFlag(bp, 9) ? "shrink" : "none";
+  props.insert("pub:wordart-fit", fit);
+  if (gtextFlag(bp, 13))
+    props.insert("pub:wordart-vertical", true);
+  if (gtextFlag(bp, 12))
+    props.insert("pub:wordart-kern", true);
+  if (bool(wa.m_spacing))
+    props.insert("pub:wordart-spacing", get(wa.m_spacing));
+  if (bool(info.m_seqNum))
+    props.insert("pub:shape-id", int(get(info.m_seqNum)));
+  m_painter->startTextObject(props);
+
+  librevenge::RVNGPropertyList paraProps;
+  switch (wa.m_align.get_value_or(1))
+  {
+  case 2:
+    paraProps.insert("fo:text-align", "left");
+    break;
+  case 3:
+    paraProps.insert("fo:text-align", "right");
+    break;
+  case 4:
+  case 5:
+    paraProps.insert("fo:text-align", "justify");
+    break;
+  default: // 1 = center, 0 = stretch (centred, see pub:wordart-fit)
+    paraProps.insert("fo:text-align", "center");
+    break;
+  }
+  librevenge::RVNGPropertyList spanProps;
+  if (!wa.m_font.empty())
+  {
+    librevenge::RVNGString font;
+    appendCharacters(font, wa.m_font, "UTF-16LE");
+    spanProps.insert("style:font-name", font);
+  }
+  // inches, like every other libmspub font size; Publisher's default is 36 pt
+  spanProps.insert("fo:font-size", wa.m_sizePt.get_value_or(36.) / POINTS_IN_INCH);
+  if (gtextFlag(bp, 5))
+    spanProps.insert("fo:font-weight", "bold");
+  if (gtextFlag(bp, 4))
+    spanProps.insert("fo:font-style", "italic");
+  if (gtextFlag(bp, 3))
+    spanProps.insert("style:text-underline-type", "single");
+  if (gtextFlag(bp, 1))
+    spanProps.insert("fo:font-variant", "small-caps");
+  if (gtextFlag(bp, 0))
+    spanProps.insert("style:text-line-through-type", "single");
+  if (gtextFlag(bp, 2))
+    spanProps.insert("fo:text-shadow", "1pt 1pt");
+  if (fillProps["draw:fill"] && fillProps["draw:fill"]->getStr() == "solid" && fillProps["draw:fill-color"])
+    spanProps.insert("fo:color", fillProps["draw:fill-color"]->getStr());
+  else
+    spanProps.insert("fo:color", "#000000");
+
+  // one paragraph per line; lines are separated by CR and/or LF, NUL ends the text
+  std::vector<std::vector<unsigned char> > lines(1);
+  for (size_t i = 0; i + 1 < wa.m_text.size(); i += 2)
+  {
+    const unsigned ch = wa.m_text[i] | (wa.m_text[i + 1] << 8);
+    if (ch == 0)
+      break;
+    if (ch == '\r' || ch == '\n')
+    {
+      if (ch == '\n' && i >= 2 && (wa.m_text[i - 2] | (wa.m_text[i - 1] << 8)) == '\r')
+        continue;
+      lines.push_back(std::vector<unsigned char>());
+      continue;
+    }
+    lines.back().push_back(wa.m_text[i]);
+    lines.back().push_back(wa.m_text[i + 1]);
+  }
+  for (const auto &line : lines)
+  {
+    m_painter->openParagraph(paraProps);
+    m_painter->openSpan(spanProps);
+    if (!line.empty())
+    {
+      librevenge::RVNGString text;
+      appendCharacters(text, line, "UTF-16LE");
+      separateSpacesAndInsertText(m_painter, text);
+    }
+    m_painter->closeSpan();
+    m_painter->closeParagraph();
+  }
+  m_painter->endTextObject();
+}
+
 void MSPUBCollector::setShapeBeginArrow(unsigned seqNum,
                                         const Arrow &arrow)
 {
@@ -786,6 +924,11 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
     }
   }
   librevenge::RVNGString fill = graphicsProps["draw:fill"] ? graphicsProps["draw:fill"]->getStr() : "none";
+  if (bool(info.m_wordArt) && !get(info.m_wordArt).m_text.empty())
+  {
+    paintWordArt(info, graphicsProps, thisTransform);
+    return &no_op;
+  }
   bool hasFill = fill != "none";
   boost::optional<std::vector<TextParagraph> > maybeText = getShapeText(info);
   auto hasText = bool(maybeText);

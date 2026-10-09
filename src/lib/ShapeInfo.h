@@ -33,6 +33,17 @@
 
 namespace libmspub
 {
+// pub-converter: WordArt (MS-ODRAW GeometryText properties)
+struct WordArtInfo
+{
+  std::vector<unsigned char> m_text;  // UTF-16LE, gtextUNICODE
+  std::vector<unsigned char> m_font;  // UTF-16LE, gtextFont
+  boost::optional<double> m_sizePt;   // gtextSize
+  boost::optional<unsigned> m_align;  // gtextAlign
+  boost::optional<double> m_spacing;  // gtextSpacing (1.0 = normal)
+  unsigned m_boolProps;               // GeometryTextBooleanProperties (value bits & their use bits)
+  WordArtInfo() : m_text(), m_font(), m_sizePt(), m_align(), m_spacing(), m_boolProps(0) { }
+};
 void noop(const CustomShape *);
 struct ShapeInfo
 {
@@ -74,6 +85,7 @@ struct ShapeInfo
   boost::optional<unsigned> m_textChainNext;
   // picture crop, fractions of the image (top, bottom, left, right); negative = padding
   boost::optional<std::vector<double> > m_pictureCrop;
+  boost::optional<WordArtInfo> m_wordArt;
   ShapeInfo() : m_type(), m_cropType(), m_imgIndex(), m_borderImgIndex(),
     m_coordinates(), m_lines(), m_pageSeqNum(),
     m_textId(), m_adjustValuesByIndex(), m_adjustValues(),
@@ -83,7 +95,7 @@ struct ShapeInfo
     m_numColumns(),
     m_columnSpacing(0), m_beginArrow(), m_endArrow(),
     m_verticalAlign(), m_pictureRecolor(), m_shadow(), m_innerRotation(), m_clipPath(), m_pictureBrightness(), m_pictureContrast(),
-    m_seqNum(), m_textChainIndex(0), m_textChainPrev(), m_textChainNext(), m_pictureCrop()
+    m_seqNum(), m_textChainIndex(0), m_textChainPrev(), m_textChainNext(), m_pictureCrop(), m_wordArt()
   {
   }
   std::shared_ptr<const CustomShape> getCustomShape() const

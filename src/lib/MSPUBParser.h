@@ -122,6 +122,8 @@ protected:
   bool findEscherContainer(librevenge::RVNGInputStream *input, const EscherContainerInfo &parent, EscherContainerInfo &out, unsigned short type);
   bool findEscherContainerWithTypeInSet(librevenge::RVNGInputStream *input, const EscherContainerInfo &parent, EscherContainerInfo &out, std::set<unsigned short> types);
   std::map<unsigned short, unsigned> extractEscherValues(librevenge::RVNGInputStream *input, const EscherContainerInfo &record);
+  static bool isStringComplexProperty(unsigned short id);
+  static const std::vector<unsigned char> *findComplexValue(const FOPTValues &values, unsigned short pid);
   FOPTValues extractFOPTValues(librevenge::RVNGInputStream *input,
                                const libmspub::EscherContainerInfo &record);
   std::vector<TextSpanReference> parseCharacterStyles(librevenge::RVNGInputStream *input, const QuillChunkReference &chunk);

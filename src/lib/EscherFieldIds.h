@@ -74,6 +74,12 @@
 #define FIELDID_END_ARROW_STYLE        0x01D1
 #define FIELDID_END_ARROW_WIDTH        0x01D4
 #define FIELDID_END_ARROW_HEIGHT       0x01D5
+#define FIELDID_GTEXT_UNICODE          0x00C0 // complex, flag bits masked off when looked up
+#define FIELDID_GTEXT_ALIGN            0x00C2
+#define FIELDID_GTEXT_SIZE             0x00C3
+#define FIELDID_GTEXT_SPACING          0x00C4
+#define FIELDID_GTEXT_FONT             0x00C5 // complex
+#define FIELDID_GTEXT_BOOL_PROPS       0x00FF
 #define FIELDID_CROP_FROM_TOP          0x0100
 #define FIELDID_CROP_FROM_BOTTOM       0x0101
 #define FIELDID_CROP_FROM_LEFT         0x0102

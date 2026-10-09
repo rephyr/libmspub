@@ -1812,6 +1812,35 @@ void MSPUBParser::parseEscherShape(librevenge::RVNGInputStream *input, const Esc
                                                ptr_cropLeft ? toFixedPoint(int(*ptr_cropLeft)) : 0,
                                                ptr_cropRight ? toFixedPoint(int(*ptr_cropRight)) : 0);
           }
+          // pub-converter: WordArt text and its formatting
+          {
+            const std::vector<unsigned char> *gtext = findComplexValue(foptValues, FIELDID_GTEXT_UNICODE);
+            if (gtext && gtext->size() >= 2)
+            {
+              WordArtInfo wa;
+              wa.m_text = *gtext;
+              const std::vector<unsigned char> *gfont = findComplexValue(foptValues, FIELDID_GTEXT_FONT);
+              if (gfont)
+              {
+                wa.m_font = *gfont;
+                while (wa.m_font.size() >= 2 && wa.m_font[wa.m_font.size() - 1] == 0 && wa.m_font[wa.m_font.size() - 2] == 0)
+                  wa.m_font.resize(wa.m_font.size() - 2);
+              }
+              const unsigned *ptr_gSize = getIfExists_const(foptValues.m_scalarValues, FIELDID_GTEXT_SIZE);
+              if (ptr_gSize && *ptr_gSize)
+                wa.m_sizePt = toFixedPoint(int(*ptr_gSize));
+              const unsigned *ptr_gAlign = getIfExists_const(foptValues.m_scalarValues, FIELDID_GTEXT_ALIGN);
+              if (ptr_gAlign)
+                wa.m_align = *ptr_gAlign;
+              const unsigned *ptr_gSpacing = getIfExists_const(foptValues.m_scalarValues, FIELDID_GTEXT_SPACING);
+              if (ptr_gSpacing)
+                wa.m_spacing = toFixedPoint(int(*ptr_gSpacing));
+              const unsigned *ptr_gBool = getIfExists_const(foptValues.m_scalarValues, FIELDID_GTEXT_BOOL_PROPS);
+              if (ptr_gBool)
+                wa.m_boolProps = *ptr_gBool;
+              m_collector->setShapeWordArt(*shapeSeqNum, wa);
+            }
+          }
           unsigned *ptr_lineBackColor =
             getIfExists(foptValues.m_scalarValues, FIELDID_LINE_BACK_COLOR);
           if (ptr_lineBackColor &&
@@ -2434,6 +2463,32 @@ bool MSPUBParser::findEscherContainer(librevenge::RVNGInputStream *input, const 
   return false;
 }
 
+bool MSPUBParser::isStringComplexProperty(unsigned short id)
+{
+  switch (id & 0x3FFF)
+  {
+  case 0x00C0: // gtextUNICODE
+  case 0x00C5: // gtextFont
+  case 0x00C6: // gtextCSSFont
+  case 0x0105: // pibName
+  case 0x0187: // fillBlipName
+  case 0x0380: // wzName
+  case 0x0381: // wzDescription
+  case 0x038D: // wzTooltip
+    return true;
+  default:
+    return false;
+  }
+}
+
+const std::vector<unsigned char> *MSPUBParser::findComplexValue(const FOPTValues &values, unsigned short pid)
+{
+  for (const auto &it : values.m_complexValues)
+    if ((it.first & 0x3FFF) == pid)
+      return &it.second;
+  return nullptr;
+}
+
 FOPTValues MSPUBParser::extractFOPTValues(librevenge::RVNGInputStream *input, const EscherContainerInfo &record)
 {
   FOPTValues ret;
@@ -2464,6 +2519,16 @@ FOPTValues MSPUBParser::extractFOPTValues(librevenge::RVNGInputStream *input, co
     unsigned length = ret.m_scalarValues[id];
     if (!length)
     {
+      continue;
+    }
+    if (isStringComplexProperty(id))
+    {
+      // pub-converter: strings (WordArt text/font, picture/shape names, alt text)
+      // are not arrays; their length is the property value itself. Reading them
+      // as arrays misplaced every complex value after them.
+      const unsigned long end = record.contentsOffset + record.contentsLength;
+      const unsigned long pos = input->tell();
+      readNBytes(input, pos < end ? std::min<unsigned long>(length, end - pos) : 0, ret.m_complexValues[id]);
       continue;
     }
     unsigned short numEntries = readU16(input);

@@ -73,6 +73,7 @@ public:
   void setShapePictureBrightness(unsigned seqNum, int brightness);
   void setShapePictureContrast(unsigned seqNum, int contrast);
   void setShapePictureCrop(unsigned seqNum, double top, double bottom, double left, double right);
+  void setShapeWordArt(unsigned seqNum, const WordArtInfo &wordArt);
   void setShapeTableInfo(unsigned seqNum, const TableInfo &ti);
   void setShapeBorderImageId(unsigned seqNum, unsigned borderImageId);
   void setShapeCoordinatesInEmu(unsigned seqNum, int xs, int ys, int xe, int ye);
@@ -181,6 +182,7 @@ private:
 
   void collectTextChains();
   void insertTextIdProps(const ShapeInfo &info, librevenge::RVNGPropertyList &props) const;
+  void paintWordArt(const ShapeInfo &info, const librevenge::RVNGPropertyList &fillProps, const VectorTransformation2D &thisTransform) const;
 
   // helper functions
   std::vector<int> getShapeAdjustValues(const ShapeInfo &info) const;
