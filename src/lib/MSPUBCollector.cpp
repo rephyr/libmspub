@@ -653,19 +653,27 @@ Coordinate getFudgedCoordinates(Coordinate coord, const std::vector<Line> &lines
   unsigned rightFudge = 0;
   unsigned bottomFudge = 0;
   unsigned leftFudge = 0;
+  // pub-converter patch 14: ONE line means the same line on all four sides. Upstream fudged only the top edge
+  // (lines[0]), so a thick frame's top sat half a line width too high (osp-*: 20 pt frame, top 0.14 in high in
+  // every page vs the Publisher PDF; left, right and bottom were right). With a half-inside border the line is
+  // drawn centred on the shape's edge, as in that PDF: no change to the stroke rectangle; the text area shrinks by
+  // half the width on every side.
+  const bool oneLine = lines.size() == 1;
+  if (oneLine && borderPosition == HALF_INSIDE_SHAPE && makeBigger)
+    return fudged;
   switch (borderPosition)
   {
   case HALF_INSIDE_SHAPE:
     topFudge = (!lines.empty()) ? lines[0].m_widthInEmu / 2 : 0;
-    rightFudge = (lines.size() > 1) ? lines[1].m_widthInEmu / 2 : 0;
-    bottomFudge = (lines.size() > 2) ? lines[2].m_widthInEmu / 2 : 0;
-    leftFudge = (lines.size() > 3) ? lines[3].m_widthInEmu / 2 : 0;
+    rightFudge = (lines.size() > 1) ? lines[1].m_widthInEmu / 2 : oneLine ? topFudge : 0;
+    bottomFudge = (lines.size() > 2) ? lines[2].m_widthInEmu / 2 : oneLine ? topFudge : 0;
+    leftFudge = (lines.size() > 3) ? lines[3].m_widthInEmu / 2 : oneLine ? topFudge : 0;
     break;
   case OUTSIDE_SHAPE:
     topFudge = (!lines.empty()) ? lines[0].m_widthInEmu : 0;
-    rightFudge = (lines.size() > 1) ? lines[1].m_widthInEmu : 0;
-    bottomFudge = (lines.size() > 2) ? lines[2].m_widthInEmu : 0;
-    leftFudge = (lines.size() > 3) ? lines[3].m_widthInEmu : 0;
+    rightFudge = (lines.size() > 1) ? lines[1].m_widthInEmu : oneLine ? topFudge : 0;
+    bottomFudge = (lines.size() > 2) ? lines[2].m_widthInEmu : oneLine ? topFudge : 0;
+    leftFudge = (lines.size() > 3) ? lines[3].m_widthInEmu : oneLine ? topFudge : 0;
     break;
   case INSIDE_SHAPE:
   default:
