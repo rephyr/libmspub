@@ -1014,6 +1014,27 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
       if (bool(info.m_wrapDistances[i]))
         graphicsProps.insert(names[i], double(int(get(info.m_wrapDistances[i]))) / EMUS_IN_INCH);
   }
+  // pub-converter patch 15: line ends (MS-ODRAW lineStartArrowhead/lineEndArrowhead and their width/length).
+  // libmspub parsed them into m_beginArrow/m_endArrow but never wrote them, so arrows lost their heads.
+  {
+    static const char *const styles[] = { "none", "triangle", "stealth", "diamond", "oval", "open" };
+    static const char *const sizes[] = { "small", "medium", "large" };
+    const boost::optional<Arrow> *arrows[2] = { &info.m_beginArrow, &info.m_endArrow };
+    static const char *const keys[2] = { "pub:arrow-start", "pub:arrow-end" };
+    for (unsigned i = 0; i < 2; ++i)
+    {
+      if (!bool(*arrows[i]) || arrows[i]->get().m_style == NO_ARROW)
+        continue;
+      const Arrow &a = arrows[i]->get();
+      const unsigned st = unsigned(a.m_style) < 6 ? unsigned(a.m_style) : 1;
+      graphicsProps.insert(keys[i], styles[st]);
+      librevenge::RVNGString w, l;
+      w.sprintf("%s-width", keys[i]);
+      l.sprintf("%s-length", keys[i]);
+      graphicsProps.insert(w.cstr(), sizes[unsigned(a.m_width) < 3 ? unsigned(a.m_width) : 1]);
+      graphicsProps.insert(l.cstr(), sizes[unsigned(a.m_height) < 3 ? unsigned(a.m_height) : 1]);
+    }
+  }
   bool hasStroke = false;
   bool hasBorderArt = false;
   boost::optional<unsigned> maybeBorderImg = info.m_borderImgIndex;
