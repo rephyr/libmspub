@@ -1456,7 +1456,25 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
     librevenge::RVNGPropertyList props;
     setRectCoordProps(textCoord, &props);
     double textRotation = thisTransform.getRotation();
-    if (textRotation != 0)
+    // pub-converter patch 16: flipped text boxes. The transform folds flips into the rotation, so a box flipped
+    // horizontally came out upside down, and one rotated 180 degrees and flipped vertically too. Office text is never
+    // mirrored: a horizontal flip leaves the text alone and a vertical flip turns it by 180 degrees [Office
+    // behaviour, assumed for Publisher]. So: text rotation = the shape's own rotation, + 180 when flipped
+    // vertically. The flips are written as pub:flip-h / pub:flip-v.
+    if (bool(info.m_flips) && (get(info.m_flips).first || get(info.m_flips).second))
+    {
+      double deg = doubleModulo(info.m_rotation.get_value_or(0), 360);
+      if (get(info.m_flips).first)
+        deg = doubleModulo(deg + 180, 360);
+      if (deg > 180)
+        deg -= 360;
+      textRotation = deg * M_PI / 180;
+      if (get(info.m_flips).second)
+        props.insert("pub:flip-h", true);
+      if (get(info.m_flips).first)
+        props.insert("pub:flip-v", true);
+    }
+    if (fabs(textRotation) > 1e-9)
     {
       props.insert("librevenge:rotate", textRotation * 180 / M_PI);
     }
