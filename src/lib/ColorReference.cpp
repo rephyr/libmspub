@@ -30,8 +30,19 @@ Color ColorReference::getFinalColor(const std::vector<Color> &palette) const
   unsigned char modifiedType = (m_modifiedColor >> 24) & 0xFF;
   if (modifiedType == CHANGE_INTENSITY)
   {
-    Color c = getRealColor(m_baseColor, palette);
     unsigned char changeIntensityBase = (m_modifiedColor >> 8) & 0xFF;
+    // pub-converter patch 13: 0x10 is MS-ODRAW's fSysIndex. With no colour function (byte 1 = 0) the low byte
+    // is a system colour index, not an intensity change; upstream returned black for it.
+    // 0xF0-0xF7 name another colour of the same shape (only known here as the base colour); for indices
+    // below 0xF0 [guess] white: tdf95348-csgrn's 0x10000011 fill is white in Publisher's screenshot.
+    if (changeIntensityBase == 0)
+    {
+      const unsigned index = m_modifiedColor & 0xFF;
+      if (index >= 0xF0 && ((m_baseColor >> 24) & 0xFF) != CHANGE_INTENSITY)
+        return getRealColor(m_baseColor, palette);
+      return Color(0xFF, 0xFF, 0xFF);
+    }
+    Color c = getRealColor(m_baseColor, palette);
     double intensity = (double)((m_modifiedColor >> 16) & 0xFF) / 0xFF;
     if (changeIntensityBase == BLACK_BASE)
     {

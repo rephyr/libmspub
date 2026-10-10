@@ -40,6 +40,8 @@ struct Dash;
 struct Line;
 struct Shadow;
 struct TableInfo;
+struct TableBorderInfo;
+struct TableCellFillInfo;
 
 class MSPUBCollector
 {
@@ -76,6 +78,9 @@ public:
   void setShapeWordArt(unsigned seqNum, const WordArtInfo &wordArt);
   void setShapeWrapShapes(unsigned seqNum, const std::vector<unsigned> &shapes);
   void setShapeTableInfo(unsigned seqNum, const TableInfo &ti);
+  void addTableBorder(unsigned tableSeqNum, const TableBorderInfo &border);
+  void addTableCellFill(unsigned tableSeqNum, const TableCellFillInfo &fill);
+  void setShapeWrapDistance(unsigned seqNum, unsigned side, unsigned emu);
   void setShapeBorderImageId(unsigned seqNum, unsigned borderImageId);
   void setShapeCoordinatesInEmu(unsigned seqNum, int xs, int ys, int xe, int ye);
   void setShapeImgIndex(unsigned seqNum, unsigned index);
@@ -118,6 +123,7 @@ public:
   void addFont(std::vector<unsigned char> name);
 
   void addDefaultCharacterStyle(const CharacterStyle &style);
+  void setDefaultCharStyleSizeIfUnset(unsigned index, double sizePt);
   void addDefaultParagraphStyle(const ParagraphStyle &style);
   void addPaletteColor(Color);
   bool setCurrentGroupSeqNum(unsigned seqNum);
@@ -171,6 +177,8 @@ private:
   std::set<unsigned> m_shapesWithCoordinatesRotated90;
   std::map<unsigned, unsigned> m_masterPagesByPageSeqNum;
   std::map<unsigned, std::vector<unsigned> > m_tableCellTextEndsByTextId;
+  std::map<unsigned, std::vector<TableBorderInfo> > m_tableBordersBySeqNum;    // pub-converter patch 13
+  std::map<unsigned, std::vector<TableCellFillInfo> > m_tableCellFillsBySeqNum; // pub-converter patch 13
   std::map<unsigned, unsigned> m_stringOffsetsByTextId;
   mutable std::vector<bool> m_calculationValuesSeen;
   std::vector<unsigned> m_pageSeqNumsOrdered;

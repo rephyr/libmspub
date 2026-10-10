@@ -42,7 +42,8 @@ struct WordArtInfo
   boost::optional<unsigned> m_align;  // gtextAlign
   boost::optional<double> m_spacing;  // gtextSpacing (1.0 = normal)
   unsigned m_boolProps;               // GeometryTextBooleanProperties (value bits & their use bits)
-  WordArtInfo() : m_text(), m_font(), m_sizePt(), m_align(), m_spacing(), m_boolProps(0) { }
+  std::map<unsigned, int> m_adjust;   // pub-converter patch 13: adjustValue..adjust10Value (index 1..10), raw
+  WordArtInfo() : m_text(), m_font(), m_sizePt(), m_align(), m_spacing(), m_boolProps(0), m_adjust() { }
 };
 void noop(const CustomShape *);
 struct ShapeInfo
@@ -87,6 +88,8 @@ struct ShapeInfo
   boost::optional<std::vector<double> > m_pictureCrop;
   boost::optional<WordArtInfo> m_wordArt;
   std::vector<unsigned> m_wrapShapes;
+  // pub-converter patch 13: MS-ODRAW dxWrapDistLeft, dyWrapDistTop, dxWrapDistRight, dyWrapDistBottom (EMU)
+  boost::optional<unsigned> m_wrapDistances[4];
   ShapeInfo() : m_type(), m_cropType(), m_imgIndex(), m_borderImgIndex(),
     m_coordinates(), m_lines(), m_pageSeqNum(),
     m_textId(), m_adjustValuesByIndex(), m_adjustValues(),

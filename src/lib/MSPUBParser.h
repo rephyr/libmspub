@@ -113,11 +113,13 @@ protected:
   bool parseFontChunk(librevenge::RVNGInputStream *input,
                       const ContentChunkReference &chunk);
   void parsePaletteEntry(librevenge::RVNGInputStream *input, MSPUBBlockInfo block);
+  void parseStyleDefinitions(librevenge::RVNGInputStream *input, const QuillChunkReference &chunk, std::vector<std::pair<int, boost::optional<double> > > &sizes);
   void parseColors(librevenge::RVNGInputStream *input, const QuillChunkReference &chunk);
   void parseFonts(librevenge::RVNGInputStream *input, const QuillChunkReference &chunk);
   void parseDefaultStyle(librevenge::RVNGInputStream *input, const QuillChunkReference &chunk);
   void parseShapeGroup(librevenge::RVNGInputStream *input, const EscherContainerInfo &spgr, Coordinate parentCoordinateSystem, Coordinate parentGroupAbsoluteCoord, unsigned depth = 0);
   void skipBlock(librevenge::RVNGInputStream *input, MSPUBBlockInfo block);
+  void parseTableCellShape(librevenge::RVNGInputStream *input, const EscherContainerInfo &sp, const EscherContainerInfo &anchor);
   void parseEscherShape(librevenge::RVNGInputStream *input, const EscherContainerInfo &sp, Coordinate &parentCoordinateSystem, Coordinate &parentGroupAbsoluteCoord);
   bool findEscherContainer(librevenge::RVNGInputStream *input, const EscherContainerInfo &parent, EscherContainerInfo &out, unsigned short type);
   bool findEscherContainerWithTypeInSet(librevenge::RVNGInputStream *input, const EscherContainerInfo &parent, EscherContainerInfo &out, std::set<unsigned short> types);

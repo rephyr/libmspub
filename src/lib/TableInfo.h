@@ -11,6 +11,7 @@
 #define INCLUDED_TABLEINFO_H
 
 #include <vector>
+#include <boost/optional.hpp>
 
 namespace libmspub
 {
@@ -22,6 +23,7 @@ struct CellInfo
     , m_endRow()
     , m_startColumn()
     , m_endColumn()
+    , m_marginsEmu()
   {
   }
 
@@ -29,6 +31,34 @@ struct CellInfo
   unsigned m_endRow;
   unsigned m_startColumn;
   unsigned m_endColumn;
+  // pub-converter: CELLS record blocks 0x0a-0x0d, [guess] left, right, top, bottom text margins (EMU)
+  boost::optional<unsigned> m_marginsEmu[4];
+};
+
+// pub-converter: one table border segment, drawn by Publisher as a separate Escher shape whose
+// ClientAnchor is a block list (0x01 = 1 horizontal / 2 vertical, 0x02 = table seqnum,
+// 0x04/0x05 = start row/column grid line, 0x06/0x07 = end row/column grid line). Reverse-engineered.
+struct TableBorderInfo
+{
+  unsigned m_kind;
+  unsigned m_row1, m_col1, m_row2, m_col2;
+  unsigned m_color;      // OfficeArtCOLORREF of the shape fill (the border colour)
+  bool m_visible;        // shape fill on (fFilled)
+  unsigned m_widthEmu;   // lineWidth (default 9525)
+  boost::optional<unsigned> m_dashing; // lineDashing, raw
+  TableBorderInfo() : m_kind(0), m_row1(0), m_col1(0), m_row2(0), m_col2(0), m_color(0), m_visible(true),
+    m_widthEmu(9525), m_dashing() { }
+};
+
+// pub-converter: one cell fill, an Escher shape whose ClientAnchor has no 0x01 and 0x03 = cell index
+// (the cell's position in the CELLS record list).
+struct TableCellFillInfo
+{
+  unsigned m_cellIndex;
+  unsigned m_color;
+  bool m_filled;
+  boost::optional<unsigned> m_opacity; // fillOpacity, 16.16
+  TableCellFillInfo() : m_cellIndex(0), m_color(0), m_filled(true), m_opacity() { }
 };
 
 struct TableInfo

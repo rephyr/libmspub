@@ -413,6 +413,27 @@ void MSPUBCollector::setShapePictureCrop(unsigned seqNum, double top, double bot
   m_shapeInfosBySeqNum[seqNum].m_pictureCrop = crop;
 }
 
+// pub-converter patch 13: table border segments and cell fills (Escher shapes anchored to a table)
+void MSPUBCollector::addTableBorder(unsigned tableSeqNum, const TableBorderInfo &border)
+{
+  std::vector<TableBorderInfo> &v = m_tableBordersBySeqNum[tableSeqNum];
+  if (v.size() < 100000)
+    v.push_back(border);
+}
+
+void MSPUBCollector::addTableCellFill(unsigned tableSeqNum, const TableCellFillInfo &fill)
+{
+  std::vector<TableCellFillInfo> &v = m_tableCellFillsBySeqNum[tableSeqNum];
+  if (v.size() < 100000)
+    v.push_back(fill);
+}
+
+void MSPUBCollector::setShapeWrapDistance(unsigned seqNum, unsigned side, unsigned emu)
+{
+  if (side < 4)
+    m_shapeInfosBySeqNum[seqNum].m_wrapDistances[side] = emu;
+}
+
 void MSPUBCollector::setShapeWrapShapes(unsigned seqNum, const std::vector<unsigned> &shapes)
 {
   m_shapeInfosBySeqNum[seqNum].m_wrapShapes = shapes;
@@ -476,6 +497,26 @@ void MSPUBCollector::paintWordArt(const ShapeInfo &info, const librevenge::RVNGP
     props.insert("pub:wordart-kern", true);
   if (bool(wa.m_spacing))
     props.insert("pub:wordart-spacing", get(wa.m_spacing));
+  // pub-converter patch 13: warp adjust values (raw MS-ODRAW adjustValue..adjust10Value) and flips
+  if (!wa.m_adjust.empty())
+  {
+    librevenge::RVNGPropertyListVector adj;
+    for (const auto &a : wa.m_adjust)
+    {
+      librevenge::RVNGPropertyList item;
+      item.insert("pub:index", int(a.first));
+      item.insert("pub:value", a.second);
+      adj.append(item);
+    }
+    props.insert("pub:wordart-adjust", adj);
+  }
+  if (bool(info.m_flips))
+  {
+    if (get(info.m_flips).second)
+      props.insert("pub:flip-h", true);
+    if (get(info.m_flips).first)
+      props.insert("pub:flip-v", true);
+  }
   if (bool(info.m_seqNum))
     props.insert("pub:shape-id", int(get(info.m_seqNum)));
   m_painter->startTextObject(props);
@@ -671,7 +712,7 @@ MSPUBCollector::MSPUBCollector(librevenge::RVNGDrawingInterface *painter) :
   m_shapeInfosBySeqNum(), m_masterPages(),
   m_shapesWithCoordinatesRotated90(),
   m_masterPagesByPageSeqNum(),
-  m_tableCellTextEndsByTextId(), m_stringOffsetsByTextId(),
+  m_tableCellTextEndsByTextId(), m_tableBordersBySeqNum(), m_tableCellFillsBySeqNum(), m_stringOffsetsByTextId(),
   m_calculationValuesSeen(), m_pageSeqNumsOrdered(),
   m_encodingHeuristic(false), m_allText(),
   m_calculatedEncoding(),
@@ -957,6 +998,13 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
     graphicsProps.insert("pub:shape-type", int(shapeType));
     if (!info.getCustomShape())
       graphicsProps.insert("pub:shape-undrawn", true);
+  }
+  // pub-converter patch 13: text wrap distances of this shape (MS-ODRAW dxWrapDist*/dyWrapDist*), when set
+  {
+    static const char *const names[4] = { "pub:wrap-distance-left", "pub:wrap-distance-top", "pub:wrap-distance-right", "pub:wrap-distance-bottom" };
+    for (unsigned i = 0; i < 4; ++i)
+      if (bool(info.m_wrapDistances[i]))
+        graphicsProps.insert(names[i], double(int(get(info.m_wrapDistances[i]))) / EMUS_IN_INCH);
   }
   bool hasStroke = false;
   bool hasBorderArt = false;
@@ -1395,6 +1443,38 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
       }
       props.insert("librevenge:table-columns", columnWidths);
       insertTextIdProps(info, props);
+      // pub-converter patch 13: border segments on the table grid (see engine/JSON.md)
+      if (bool(info.m_seqNum))
+      {
+        const auto bit = m_tableBordersBySeqNum.find(get(info.m_seqNum));
+        if (bit != m_tableBordersBySeqNum.end())
+        {
+          librevenge::RVNGPropertyListVector borders;
+          for (const TableBorderInfo &b : bit->second)
+          {
+            if (!b.m_visible || (b.m_kind != 1 && b.m_kind != 2))
+              continue;
+            librevenge::RVNGPropertyList seg;
+            seg.insert("pub:border-dir", b.m_kind == 1 ? "h" : "v");
+            seg.insert("pub:row1", int(b.m_row1));
+            seg.insert("pub:col1", int(b.m_col1));
+            seg.insert("pub:row2", int(b.m_row2));
+            seg.insert("pub:col2", int(b.m_col2));
+            seg.insert("svg:stroke-color", getColorString(ColorReference(b.m_color).getFinalColor(m_paletteColors)));
+            seg.insert("svg:stroke-width", double(b.m_widthEmu) / EMUS_IN_INCH);
+            if (bool(b.m_dashing) && get(b.m_dashing) != 0)
+            {
+              seg.insert("draw:stroke", "dash");
+              seg.insert("pub:line-dashing", int(get(b.m_dashing)));
+            }
+            else
+              seg.insert("draw:stroke", "solid");
+            borders.append(seg);
+          }
+          if (borders.count())
+            props.insert("pub:table-borders", borders);
+        }
+      }
 
       m_painter->startTableObject(props);
 
@@ -1431,6 +1511,33 @@ std::function<void(void)> MSPUBCollector::paintShape(const ShapeInfo &info, cons
               cellProps.insert("table:number-columns-spanned", int(tableLayout[row][col].m_colSpan));
             if (tableLayout[row][col].m_rowSpan > 1)
               cellProps.insert("table:number-rows-spanned", int(tableLayout[row][col].m_rowSpan));
+            // pub-converter patch 13: cell fill and text margins
+            {
+              const unsigned cellIndex = tableLayout[row][col].m_cell;
+              const std::vector<CellInfo> &cells = get(info.m_tableInfo).m_cells;
+              if (cellIndex < cells.size())
+              {
+                static const char *const pad[4] = { "fo:padding-left", "fo:padding-right", "fo:padding-top", "fo:padding-bottom" };
+                for (unsigned i = 0; i < 4; ++i)
+                  if (bool(cells[cellIndex].m_marginsEmu[i]))
+                    cellProps.insert(pad[i], double(int(get(cells[cellIndex].m_marginsEmu[i]))) / EMUS_IN_INCH);
+              }
+              if (bool(info.m_seqNum))
+              {
+                const auto fit = m_tableCellFillsBySeqNum.find(get(info.m_seqNum));
+                if (fit != m_tableCellFillsBySeqNum.end())
+                {
+                  for (const TableCellFillInfo &f : fit->second)
+                  {
+                    if (f.m_cellIndex != cellIndex || !f.m_filled)
+                      continue;
+                    cellProps.insert("fo:background-color", getColorString(ColorReference(f.m_color).getFinalColor(m_paletteColors)));
+                    if (bool(f.m_opacity) && get(f.m_opacity) < 0x10000)
+                      cellProps.insert("draw:opacity", double(get(f.m_opacity)) / 0x10000, librevenge::RVNG_PERCENT);
+                  }
+                }
+              }
+            }
 
             m_painter->openTableCell(cellProps);
 
@@ -1766,6 +1873,12 @@ void MSPUBCollector::setAdjustValue(unsigned seqNum, unsigned index, int adjust)
 void MSPUBCollector::addDefaultCharacterStyle(const CharacterStyle &st)
 {
   m_defaultCharStyles.push_back(st);
+}
+
+void MSPUBCollector::setDefaultCharStyleSizeIfUnset(unsigned index, double sizePt)
+{
+  if (index < m_defaultCharStyles.size() && !bool(m_defaultCharStyles[index].textSizeInPt))
+    m_defaultCharStyles[index].textSizeInPt = sizePt;
 }
 
 void MSPUBCollector::addDefaultParagraphStyle(const ParagraphStyle &st)

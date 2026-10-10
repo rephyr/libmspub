@@ -914,7 +914,14 @@ bool MSPUBParser::parseShape(librevenge::RVNGInputStream *input,
                   case 0x04:
                     currentCell.m_endColumn = subInfo.data;
                     break;
-                  // TODO: 0x09 - 0x0e: width/height of content + margins?
+                  // pub-converter patch 13: [guess] text margins left, right, top, bottom (EMU)
+                  case 0x0a:
+                  case 0x0b:
+                  case 0x0c:
+                  case 0x0d:
+                    currentCell.m_marginsEmu[subInfo.id - 0x0a] = subInfo.data;
+                    break;
+                  // 0x09: [guess] height of the cell's text; 0x0e and 0x07: unknown
                   default:
                     break;
                   }
@@ -1160,6 +1167,7 @@ bool MSPUBParser::parseQuill(librevenge::RVNGInputStream *input)
   std::vector<TextSpanReference> spans;
   std::vector<TextParagraphReference> paras;
   unsigned whichStsh = 0;
+  std::vector<std::pair<int, boost::optional<double> > > stsh2Sizes; // pub-converter patch 13: (base style, size)
   for (std::list<QuillChunkReference>::const_iterator i = chunkReferences.begin(); i != chunkReferences.end(); ++i)
   {
     if (i->name == "TEXT")
@@ -1212,11 +1220,17 @@ bool MSPUBParser::parseQuill(librevenge::RVNGInputStream *input)
     }
     else if (i->name == "STSH")
     {
-      if (whichStsh++ == 1)
+      const unsigned thisStsh = whichStsh++;
+      if (thisStsh == 1)
       {
         input->seek(i->offset, librevenge::RVNG_SEEK_SET);
         parseDefaultStyle(input, *i);
         parsedStsh = true;
+      }
+      else if (thisStsh == 2)
+      {
+        input->seek(i->offset, librevenge::RVNG_SEEK_SET);
+        parseStyleDefinitions(input, *i, stsh2Sizes);
       }
     }
     else if (i->name == "FONT")
@@ -1238,6 +1252,21 @@ bool MSPUBParser::parseQuill(librevenge::RVNGInputStream *input)
       // Seen in 11 corpus files (parish-weekly, missal, ccuk, ...); 0x2202 = 0 is a mail-merge field, 6 a date.
       input->seek(i->offset, librevenge::RVNG_SEEK_SET);
       parsePageNumberTokens(input, *i, pageNumberFields[i->id]);
+    }
+  }
+  // pub-converter patch 13: a style whose resolved entry (second STSH) has no text size takes it from its
+  // definition chain in the third STSH (ccuk's PullQuote: 12 pt there, nothing in the second STSH)
+  for (unsigned k = 0; k < stsh2Sizes.size(); ++k)
+  {
+    int cur = int(k);
+    for (unsigned depth = 0; depth < 32 && cur >= 0 && unsigned(cur) < stsh2Sizes.size(); ++depth)
+    {
+      if (bool(stsh2Sizes[cur].second))
+      {
+        m_collector->setDefaultCharStyleSizeIfUnset(k, get(stsh2Sizes[cur].second));
+        break;
+      }
+      cur = stsh2Sizes[cur].first;
     }
   }
   if (parsedStrs && parsedSyid && parsedFdpc && parsedFdpp && parsedStsh && parsedFont && textChunkReference != chunkReferences.end())
@@ -1362,6 +1391,40 @@ void MSPUBParser::parseDefaultStyle(librevenge::RVNGInputStream *input, const Qu
 }
 
 
+// pub-converter patch 13: the third STSH holds the style definitions as differences from a base style:
+// per entry u16 length, i32 base style index (-1 = none), i32 style index, then the property record
+// (char at even entries, paragraph at odd ones). Only the text size is used (see parseQuill).
+void MSPUBParser::parseStyleDefinitions(librevenge::RVNGInputStream *input, const QuillChunkReference &chunk,
+                                        std::vector<std::pair<int, boost::optional<double> > > &sizes)
+{
+  // optional information: a short or odd third STSH must never fail the document
+  try
+  {
+    readU32(input);
+    unsigned numElements = std::min(readU32(input), m_length);
+    if (numElements > 20000)
+      return;
+    input->seek(input->tell() + 12, librevenge::RVNG_SEEK_SET);
+    std::vector<unsigned> offsets;
+    offsets.reserve(numElements);
+    for (unsigned i = 0; i < numElements; ++i)
+      offsets.push_back(readU32(input));
+    for (unsigned i = 0; i + 1 < numElements; i += 2)
+    {
+      input->seek(chunk.offset + 20 + offsets[i], librevenge::RVNG_SEEK_SET);
+      readU16(input);
+      const int base = int(readU32(input));
+      readU32(input);
+      CharacterStyle cs = getCharacterStyle(input);
+      sizes.push_back(std::make_pair(base, cs.textSizeInPt));
+    }
+  }
+  catch (...)
+  {
+    sizes.clear();
+  }
+}
+
 void MSPUBParser::parseColors(librevenge::RVNGInputStream *input, const QuillChunkReference &)
 {
   unsigned numEntries = readU32(input);
@@ -1449,6 +1512,9 @@ ParagraphStyle MSPUBParser::getParagraphStyle(librevenge::RVNGInputStream *input
   boost::optional<unsigned> listRaw2;
   boost::optional<unsigned> delimiterRaw;
 
+  boost::optional<unsigned> lineSpacingRule;
+  boost::optional<unsigned> lineSpacingRaw;
+
   unsigned offset = input->tell();
   unsigned len = readU32(input);
   while (stillReading(input, offset + len))
@@ -1462,7 +1528,13 @@ ParagraphStyle MSPUBParser::getParagraphStyle(librevenge::RVNGInputStream *input
     case PARAGRAPH_DEFAULT_CHAR_STYLE:
       ret.m_defaultCharStyleIndex = info.data;
       break;
+    case 0x33:
+      // pub-converter patch 13: line spacing rule. 1 = the 0x34 value is an exact spacing in eighths of an EMU
+      // without the unit bits (ccuk body text: 1320800 = 13 pt; matches the Publisher PDF's 12.96-13.08 pt pitch)
+      lineSpacingRule = info.data;
+      break;
     case PARAGRAPH_LINE_SPACING:
+      lineSpacingRaw = info.data;
       if (info.data & 1)
       {
         // line spacing expressed in points in the UI,
@@ -1572,6 +1644,8 @@ ParagraphStyle MSPUBParser::getParagraphStyle(librevenge::RVNGInputStream *input
       break;
     }
   }
+  if (bool(lineSpacingRule) && get(lineSpacingRule) == 1 && bool(lineSpacingRaw) && !(get(lineSpacingRaw) & 3))
+    ret.m_lineSpacing = LineSpacingInfo(LINE_SPACING_PT, static_cast<double>(get(lineSpacingRaw)) / 8 * 72 / EMUS_IN_INCH);
   if (isList)
   {
     if (bulletChar)
@@ -1939,6 +2013,13 @@ void MSPUBParser::parseEscherShape(librevenge::RVNGInputStream *input, const Esc
               const unsigned *ptr_gBool = getIfExists_const(foptValues.m_scalarValues, FIELDID_GTEXT_BOOL_PROPS);
               if (ptr_gBool)
                 wa.m_boolProps = *ptr_gBool;
+              // pub-converter patch 13: warp adjust values (adjustValue 0x0147 .. adjust10Value 0x0150)
+              for (unsigned short k = 0; k < 10; ++k)
+              {
+                const unsigned *ptr_adj = getIfExists_const(foptValues.m_scalarValues, (unsigned short)(FIELDID_ADJUST_VALUE_1 + k));
+                if (ptr_adj)
+                  wa.m_adjust[k + 1] = int(*ptr_adj);
+              }
               m_collector->setShapeWordArt(*shapeSeqNum, wa);
             }
           }
@@ -2065,6 +2146,13 @@ void MSPUBParser::parseEscherShape(librevenge::RVNGInputStream *input, const Esc
                                        ptr_top ? *ptr_top : DEFAULT_MARGIN,
                                        ptr_right ? *ptr_right : DEFAULT_MARGIN,
                                        ptr_bottom ? *ptr_bottom : DEFAULT_MARGIN);
+          // pub-converter patch 13: text wrap distances (MS-ODRAW dxWrapDistLeft 0x0384 .. dyWrapDistBottom 0x0387)
+          for (unsigned short k = 0; k < 4; ++k)
+          {
+            const unsigned *ptr_wrap = getIfExists_const(foptValues.m_scalarValues, (unsigned short)(0x0384 + k));
+            if (ptr_wrap)
+              m_collector->setShapeWrapDistance(*shapeSeqNum, k, *ptr_wrap);
+          }
           unsigned *ptr_lineDashing = getIfExists(foptValues.m_scalarValues, FIELDID_LINE_DASHING);
           unsigned *ptr_lineEndcapStyle = getIfExists(foptValues.m_scalarValues, FIELDID_LINE_ENDCAP_STYLE);
           DotStyle dotStyle = RECT_DOT;
@@ -2233,6 +2321,69 @@ void MSPUBParser::parseEscherShape(librevenge::RVNGInputStream *input, const Esc
         }
       }
     }
+  }
+  else
+  {
+    // pub-converter patch 13: table borders and cell fills. Publisher stores them as Escher shapes
+    // without ClientData whose ClientAnchor is a Contents-style block list naming the table.
+    input->seek(sp.contentsOffset, librevenge::RVNG_SEEK_SET);
+    EscherContainerInfo cTableAnchor;
+    if (findEscherContainer(input, sp, cTableAnchor, OFFICE_ART_CLIENT_ANCHOR))
+      parseTableCellShape(input, sp, cTableAnchor);
+  }
+}
+
+// pub-converter patch 13 (reverse-engineered): anchor blocks (id byte + type byte 0x20/0x68, u32 value)
+// 0x01 kind (1 = horizontal border segment, 2 = vertical segment, absent = cell fill), 0x02 (type 0x68) the
+// table's seqnum, 0x03 the cell index (fills), 0x04/0x05 start row/column and 0x06/0x07 end row/column of a
+// segment, in grid-line units. The shape's fill colour is the border colour, lineWidth its width.
+void MSPUBParser::parseTableCellShape(librevenge::RVNGInputStream *input, const EscherContainerInfo &sp, const EscherContainerInfo &anchor)
+{
+  std::map<unsigned short, unsigned> a = extractEscherValues(input, anchor);
+  const unsigned *ptr_table = getIfExists_const(a, 0x6802);
+  if (!ptr_table)
+    return;
+  FOPTValues foptValues;
+  input->seek(sp.contentsOffset, librevenge::RVNG_SEEK_SET);
+  EscherContainerInfo cFopt;
+  if (findEscherContainer(input, sp, cFopt, OFFICE_ART_FOPT))
+    foptValues = extractFOPTValues(input, cFopt);
+  const std::map<unsigned short, unsigned> &f = foptValues.m_scalarValues;
+  const unsigned *ptr_fillColor = getIfExists_const(f, FIELDID_FILL_COLOR);
+  const unsigned *ptr_fillBools = getIfExists_const(f, 0x01BF);
+  // fFilled is bit 4, its "use" bit is bit 20; MS-ODRAW default is filled
+  const bool filled = !ptr_fillBools || !(*ptr_fillBools & (1u << 20)) || (*ptr_fillBools & (1u << 4));
+  const unsigned *ptr_kind = getIfExists_const(a, 0x2001);
+  const unsigned kind = ptr_kind ? *ptr_kind : 0;
+  if (kind == 1 || kind == 2)
+  {
+    TableBorderInfo b;
+    b.m_kind = kind;
+    b.m_row1 = a[0x2004];
+    b.m_col1 = a[0x2005];
+    b.m_row2 = a[0x2006];
+    b.m_col2 = a[0x2007];
+    b.m_color = ptr_fillColor ? *ptr_fillColor : 0;
+    b.m_visible = filled;
+    const unsigned *ptr_lineWidth = getIfExists_const(f, FIELDID_LINE_WIDTH);
+    if (ptr_lineWidth)
+      b.m_widthEmu = *ptr_lineWidth;
+    const unsigned *ptr_dashing = getIfExists_const(f, FIELDID_LINE_DASHING);
+    if (ptr_dashing)
+      b.m_dashing = *ptr_dashing;
+    m_collector->addTableBorder(*ptr_table, b);
+  }
+  else if (kind == 0)
+  {
+    const unsigned *ptr_cell = getIfExists_const(a, 0x2003);
+    TableCellFillInfo c;
+    c.m_cellIndex = ptr_cell ? *ptr_cell : 0;
+    c.m_color = ptr_fillColor ? *ptr_fillColor : 0x00FFFFFF;
+    c.m_filled = filled && ptr_fillColor;
+    const unsigned *ptr_opacity = getIfExists_const(f, FIELDID_FILL_OPACITY);
+    if (ptr_opacity)
+      c.m_opacity = *ptr_opacity;
+    m_collector->addTableCellFill(*ptr_table, c);
   }
 }
 
